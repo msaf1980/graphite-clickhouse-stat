@@ -15,10 +15,16 @@ import (
 )
 
 func printReport(name string, sortKey string, n int) {
-	fmt.Printf("      Top %d report: %s (sort by %s)\n", n, name, sortKey)
+	fmt.Printf("      Top %d report: %s (sort by %s)\n\n", n, name, sortKey)
 }
 
 func printHeaderIndexAgg() {
+	fmt.Printf("%6s | %6s | %14s | %10s | %6s | %6s | %6s | %6s | %6s | %s\n",
+		"count", "errors", "metric", "sum", "median", "p90", "p95", "p99", "max", "query",
+	)
+}
+
+func printHeaderDataAgg() {
 	fmt.Printf("%6s | %6s | %14s | %10s | %6s | %6s | %6s | %6s | %6s | %s\n",
 		"count", "errors", "metric", "sum", "median", "p90", "p95", "p99", "max", "query",
 	)
@@ -143,116 +149,237 @@ func aggRun(cmd *cobra.Command, args []string) {
 		printTableAndDuration(aggStat.Key.RequestType, aggStat.Key.IndexTable, aggStat.Key.Duration.String())
 
 		printCountBlank()
-		printAggNode("chrows", &aggStat.IndexReadRows, 0)
+		printAggNode("metrics", &aggStat.Metrics, 0)
 		queryIds := aggSum.IndexQueryIds
-		fmt.Printf("IDs: %s", queryIds[0])
+		fmt.Printf(" IDs: %s", queryIds[0])
+		if len(queryIds) > 2 {
+			fmt.Printf(" .. %s", queryIds[len(queryIds)/2])
+		}
 		if len(queryIds) > 1 {
 			fmt.Printf(" .. %s", queryIds[len(queryIds)-1])
 		}
 		printEndline()
 
 		printCountBlank()
+		printAggNode("chrows", &aggStat.IndexReadRows, 0)
+		printEndline()
+
+		printCountBlank()
 		printAggNode("chsize", &aggStat.IndexReadBytes, 0)
 		printTarget(aggStat.Key.Target)
+
+		if len(aggSum.RequestErrors) > 0 {
+			for respStatus, errMap := range aggSum.RequestErrors {
+				fmt.Printf(" Errors with status %d:\n", respStatus)
+				for err, count := range errMap {
+					fmt.Printf("        %d: %s\n", count, err)
+				}
+			}
+		}
 
 		printFooter()
 	}
 	printEndline()
 
-	if n > 1 {
-		var failed int
+	// Index queries with errors
 
-		printReport("Other index queries with errors", aggConfig.AggKey.String(), aggConfig.Top)
-		printHeaderIndexAgg()
-		printFooter()
+	sort.SliceStable(statIndexAgg, func(i, j int) bool {
+		return aggregate.LessIndexAggSumByErrors(&statIndexAgg[i], &statIndexAgg[j])
+	})
 
-		for i := n; i >= 0 && failed < aggConfig.Top; i-- {
-			aggStat := statIndexAgg[i]
+	printReport("Index queries with errors", aggConfig.AggKey.String(), aggConfig.Top)
+	printHeaderIndexAgg()
+	printFooter()
+	for i := n; i < len(statIndexAgg); i++ {
+		aggStat := statIndexAgg[i]
+		if aggStat.Errors > 0 {
 			aggSum := statIndexSum[aggStat.Key]
 
-			if aggSum.Errors > 0 {
-				failed++
+			printCount(aggSum.N, aggSum.Errors)
+			printAggTimeNode("time", &aggStat.IndexTime)
+			printTableAndDuration(aggStat.Key.RequestType, aggStat.Key.IndexTable, aggStat.Key.Duration.String())
 
-				printCount(aggSum.N, aggSum.Errors)
-				printAggTimeNode("time", &aggStat.IndexTime)
-				printTableAndDuration(aggStat.Key.RequestType, aggStat.Key.IndexTable, aggStat.Key.Duration.String())
-
-				printCountBlank()
-				printAggNode("chrows", &aggStat.IndexReadRows, 0)
-				fmt.Printf(" Errors: %s", strings.Join(aggregate.ErrorSlice(aggSum.ErrorMap), " ; "))
-
-				printEndline()
-
-				printCountBlank()
-				printAggNode("chsize", &aggStat.IndexReadBytes, 0)
-				printTarget(aggStat.Key.Target)
-
-				printFooter()
+			printCountBlank()
+			printAggNode("metrics", &aggStat.Metrics, 0)
+			queryIds := aggSum.IndexQueryIds
+			fmt.Printf(" IDs: %s", queryIds[0])
+			if len(queryIds) > 2 {
+				fmt.Printf(" .. %s", queryIds[len(queryIds)/2])
 			}
+			if len(queryIds) > 1 {
+				fmt.Printf(" .. %s", queryIds[len(queryIds)-1])
+			}
+			printEndline()
+
+			printCountBlank()
+			printAggNode("chrows", &aggStat.IndexReadRows, 0)
+			printEndline()
+
+			printCountBlank()
+			printAggNode("chsize", &aggStat.IndexReadBytes, 0)
+			printTarget(aggStat.Key.Target)
+
+			if len(aggSum.RequestErrors) > 0 {
+				for respStatus, errMap := range aggSum.RequestErrors {
+					fmt.Printf(" Errors with status %d:\n", respStatus)
+					for err, count := range errMap {
+						fmt.Printf("        %d: %s\n", count, err)
+					}
+				}
+			}
+
+			printFooter()
 		}
-		printEndline()
+	}
+	printEndline()
+
+	// Data queries
+
+	statDataAgg := statDataSum.Aggregate()
+
+	switch aggConfig.AggKey {
+	case aggregate.AggSortP99:
+		sort.SliceStable(statDataAgg, func(i, j int) bool {
+			return aggregate.LessDataAggP99ByRows(&statDataAgg[i], &statDataAgg[j])
+		})
+	case aggregate.AggSortP95:
+		sort.SliceStable(statDataAgg, func(i, j int) bool {
+			return aggregate.LessDataAggP95ByRows(&statDataAgg[i], &statDataAgg[j])
+		})
+	case aggregate.AggSortP90:
+		sort.SliceStable(statDataAgg, func(i, j int) bool {
+			return aggregate.LessDataAggP90ByRows(&statDataAgg[i], &statDataAgg[j])
+		})
+	case aggregate.AggSortMedian:
+		sort.SliceStable(statDataAgg, func(i, j int) bool {
+			return aggregate.LessDataAggMedianByRows(&statDataAgg[i], &statDataAgg[j])
+		})
+	case aggregate.AggSortSum:
+		sort.SliceStable(statDataAgg, func(i, j int) bool {
+			return aggregate.LessDataAggSumByRows(&statDataAgg[i], &statDataAgg[j])
+		})
+	default:
+		sort.SliceStable(statDataAgg, func(i, j int) bool {
+			return aggregate.LessDataAggMaxByRows(&statDataAgg[i], &statDataAgg[j])
+		})
 	}
 
-	// statDataAgg := statDataSum.Aggregate()
+	n = len(statDataAgg) - aggConfig.Top
+	if n < 0 {
+		n = 0
+	}
 
-	// switch aggConfig.AggKey {
-	// case aggregate.AggSortP99:
-	// 	sort.SliceStable(statDataAgg, func(i, j int) bool {
-	// 		return aggregate.LessDataAggP99ByRows(&statDataAgg[i], &statDataAgg[j])
-	// 	})
-	// case aggregate.AggSortP95:
-	// 	sort.SliceStable(statIndexAgg, func(i, j int) bool {
-	// 		return aggregate.LessDataAggP95ByRows(&statDataAgg[i], &statDataAgg[j])
-	// 	})
-	// case aggregate.AggSortP90:
-	// 	sort.SliceStable(statDataAgg, func(i, j int) bool {
-	// 		return aggregate.LessDataAggP90ByRows(&statDataAgg[i], &statDataAgg[j])
-	// 	})
-	// case aggregate.AggSortMedian:
-	// 	sort.SliceStable(statDataAgg, func(i, j int) bool {
-	// 		return aggregate.LessDataAggMedianByRows(&statDataAgg[i], &statDataAgg[j])
-	// 	})
-	// case aggregate.AggSortSum:
-	// 	sort.SliceStable(statIndexAgg, func(i, j int) bool {
-	// 		return aggregate.LessDataAggSumByRows(&statDataAgg[i], &statDataAgg[j])
-	// 	})
-	// default:
-	// 	sort.SliceStable(statDataAgg, func(i, j int) bool {
-	// 		return aggregate.LessDataAggMaxByRows(&statDataAgg[i], &statDataAgg[j])
-	// 	})
-	// }
+	printReport("Data queries", aggConfig.AggKey.String(), aggConfig.Top)
+	printHeaderDataAgg()
+	printFooter()
+	for i := n; i < len(statDataAgg); i++ {
+		aggStat := statDataAgg[i]
+		aggSum := statDataSum[aggStat.Key]
 
-	// n = len(statDataAgg) - aggConfig.Top
-	// if n < 0 {
-	// 	n = 0
-	// }
+		printCount(aggSum.N, aggSum.Errors)
+		printAggTimeNode("time", &aggStat.DataTime)
+		printTableAndDuration(aggStat.Key.RequestType, aggStat.Key.DataTable, aggStat.Key.Duration.String())
 
-	// printReport("Data", aggConfig.AggKey.String())
-	// printHeaderIndexAgg()
-	// printFooter()
-	// for i := n; i < len(statDataAgg); i++ {
-	// 	aggStat := statDataAgg[i]
-	// aggSum := statIndexSum[aggStat.Key]
+		printCountBlank()
+		printAggNode("metrics", &aggStat.Metrics, 0)
+		queryIds := aggSum.DataQueryIds
+		fmt.Printf(" IDs: %s", queryIds[0])
+		if len(queryIds) > 2 {
+			fmt.Printf(" .. %s", queryIds[len(queryIds)/2])
+		}
+		if len(queryIds) > 1 {
+			fmt.Printf(" .. %s", queryIds[len(queryIds)-1])
+		}
+		printEndline()
 
-	// printCount(aggSum.N, aggSum.Errors)
-	// 	printAggTimeNode("time", &aggStat.DataTime)
-	// 	printTableAndDuration(aggStat.Key.RequestType, aggStat.Key.DataTable, aggStat.Key.Duration.String())
+		printCountBlank()
+		printAggNode("points", &aggStat.Points, 0)
+		printEndline()
 
-	// 	printCountBlank()
-	// 	printAggNode("chrows", &aggStat.DataReadRows, 0)
-	// 	queryIds := statDataSum[aggStat.Key].DataQueryIds
-	// 	fmt.Printf("IDs: %s", queryIds[0])
-	// 	if len(queryIds) > 1 {
-	// 		fmt.Printf(" .. %s", queryIds[len(queryIds)-1])
-	// 	}
-	// 	printEndline()
+		printCountBlank()
+		printAggNode("bytes", &aggStat.Bytes, 0)
+		printEndline()
 
-	// 	printCountBlank()
-	// 	printAggNode("chsize", &aggStat.DataReadBytes, 0)
-	// 	printTarget(aggStat.Key.Target)
+		printCountBlank()
+		printAggNode("chrows", &aggStat.DataReadRows, 0)
+		printEndline()
 
-	// 	printFooter()
-	// }
+		printCountBlank()
+		printAggNode("chsize", &aggStat.DataReadBytes, 0)
+		printTarget(aggStat.Key.Target)
+
+		if len(aggSum.RequestErrors) > 0 {
+			for respStatus, errMap := range aggSum.RequestErrors {
+				fmt.Printf(" Errors with status %d:\n", respStatus)
+				for err, count := range errMap {
+					fmt.Printf("        %d: %s\n", count, err)
+				}
+			}
+		}
+
+		printFooter()
+	}
+	printEndline()
+
+	// Data queries with errors
+
+	sort.SliceStable(statDataAgg, func(i, j int) bool {
+		return aggregate.LessDataAggSumByErrors(&statDataAgg[i], &statDataAgg[j])
+	})
+
+	printReport("Data queries with errors", aggConfig.AggKey.String(), aggConfig.Top)
+	printHeaderDataAgg()
+	printFooter()
+	for i := n; i < len(statDataAgg); i++ {
+		aggStat := statDataAgg[i]
+		if aggStat.Errors > 0 {
+			aggSum := statDataSum[aggStat.Key]
+
+			printCount(aggSum.N, aggSum.Errors)
+			printAggTimeNode("time", &aggStat.DataTime)
+			printTableAndDuration(aggStat.Key.RequestType, aggStat.Key.DataTable, aggStat.Key.Duration.String())
+
+			printCountBlank()
+			printAggNode("metrics", &aggStat.Metrics, 0)
+			queryIds := aggSum.DataQueryIds
+			fmt.Printf(" IDs: %s", queryIds[0])
+			if len(queryIds) > 2 {
+				fmt.Printf(" .. %s", queryIds[len(queryIds)/2])
+			}
+			if len(queryIds) > 1 {
+				fmt.Printf(" .. %s", queryIds[len(queryIds)-1])
+			}
+			printEndline()
+
+			printCountBlank()
+			printAggNode("points", &aggStat.Points, 0)
+			printEndline()
+
+			printCountBlank()
+			printAggNode("bytes", &aggStat.Bytes, 0)
+			printEndline()
+
+			printCountBlank()
+			printAggNode("chrows", &aggStat.DataReadRows, 0)
+			printEndline()
+
+			printCountBlank()
+			printAggNode("chsize", &aggStat.DataReadBytes, 0)
+			printTarget(aggStat.Key.Target)
+
+			if len(aggSum.RequestErrors) > 0 {
+				for respStatus, errMap := range aggSum.RequestErrors {
+					fmt.Printf(" Errors with status %d:\n", respStatus)
+					for err, count := range errMap {
+						fmt.Printf("        %d: %s\n", count, err)
+					}
+				}
+			}
+
+			printFooter()
+		}
+	}
+	printEndline()
 }
 
 func aggFlags(rootCmd *cobra.Command) {

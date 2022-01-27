@@ -98,6 +98,9 @@ func (a *AggNode) Calc(values []float64) error {
 type StatIndexAggNode struct {
 	Key StatIndexKey
 
+	N      int64
+	Errors int64
+
 	Metrics AggNode
 
 	IndexReadRows  AggNode
@@ -147,28 +150,27 @@ func LessIndexAggSumByRows(a, b *StatIndexAggNode) bool {
 	return a.IndexReadRows.Sum < b.IndexReadRows.Sum
 }
 
-func ErrorSlice(m map[string]bool) []string {
-	errs := make([]string, len(m))
-	i := 0
-	for e, _ := range m {
-		errs[i] = e
-		i++
+func LessIndexAggSumByErrors(a, b *StatIndexAggNode) bool {
+	aErrors := int(1000.0 * float64(a.Errors) / float64(a.N))
+	bErrors := int(1000.0 * float64(b.Errors) / float64(b.N))
+	if aErrors == bErrors {
+		if a.Errors == b.Errors {
+			return a.IndexTime.P95 < b.IndexTime.P95
+		}
+		return a.Errors < b.Errors
 	}
-
-	return errs
+	return aErrors < bErrors
 }
 
 type StatIndexNode struct {
 	N      int64
 	Errors int64
 
-	ErrorMap map[string]bool
-
 	Ids []string
 
 	Metrics []float64
 
-	RequestStatus map[int64]int64
+	RequestErrors map[int64]map[string]int64
 
 	IndexReadRows  []float64
 	IndexReadBytes []float64
@@ -193,39 +195,43 @@ func NewStatIndexSummary() StatIndexSummary {
 }
 
 func (sSum StatIndexSummary) Append(s *stat.Stat) {
-	if s.IndexStatus == stat.StatusSuccess || s.IndexStatus == stat.StatusError {
-		duration := (time.Duration(s.Until-s.From) * time.Second).Truncate(time.Minute)
-		key := StatIndexKey{Target: s.Target, Duration: duration, IndexTable: s.IndexTable, RequestType: s.RequestType}
-		sNode, ok := sSum[key]
+	if s.IndexStatus == stat.StatusNone || s.IndexStatus == stat.StatusCached {
+		return
+	}
+
+	duration := (time.Duration(s.Until-s.From) * time.Second).Truncate(time.Minute)
+	key := StatIndexKey{Target: s.Target, Duration: duration, IndexTable: s.IndexTable, RequestType: s.RequestType}
+	sNode, ok := sSum[key]
+	if !ok {
+		sNode = &StatIndexNode{}
+		sNode.RequestErrors = make(map[int64]map[string]int64)
+		sSum[key] = sNode
+	}
+
+	sNode.N++
+
+	sNode.Ids = append(sNode.Ids, s.Id)
+
+	if s.IndexStatus == stat.StatusError {
+		sNode.Errors++
+		errorMap, ok := sNode.RequestErrors[s.RequestStatus]
 		if !ok {
-			sNode = &StatIndexNode{}
-			sNode.RequestStatus = make(map[int64]int64)
-			sSum[key] = sNode
+			errorMap = make(map[string]int64)
+			sNode.RequestErrors[s.RequestStatus] = errorMap
 		}
+		errorMap[s.Error]++
+	}
 
-		sNode.N++
+	sNode.IndexQueryIds = append(sNode.IndexQueryIds, s.IndexQueryId)
 
-		sNode.Ids = append(sNode.Ids, s.Id)
-
+	if s.IndexReadRows > 0 || s.Metrics > 0 {
 		sNode.Metrics = append(sNode.Metrics, float64(s.Metrics))
-
-		if s.IndexStatus == stat.StatusSuccess {
-			sNode.RequestStatus[200]++
-		} else {
-			sNode.RequestStatus[s.RequestStatus]++
-			sNode.Errors++
-			if sNode.ErrorMap == nil {
-				sNode.ErrorMap = make(map[string]bool)
-			}
-			sNode.ErrorMap[s.Error] = true
-		}
 
 		sNode.IndexReadRows = append(sNode.IndexReadRows, float64(s.IndexReadRows))
 		sNode.IndexReadBytes = append(sNode.IndexReadBytes, float64(s.IndexReadBytes))
-		sNode.IndexTime = append(sNode.IndexTime, s.IndexTime)
-
-		sNode.IndexQueryIds = append(sNode.IndexQueryIds, s.IndexQueryId)
 	}
+
+	sNode.IndexTime = append(sNode.IndexTime, s.IndexTime)
 }
 
 func (sSum StatIndexSummary) Aggregate() []StatIndexAggNode {
@@ -234,6 +240,9 @@ func (sSum StatIndexSummary) Aggregate() []StatIndexAggNode {
 	var i int
 	for k, statNode := range sSum {
 		aggStat[i].Key = k
+
+		aggStat[i].N = statNode.N
+		aggStat[i].Errors = statNode.Errors
 
 		aggStat[i].Metrics.Calc(statNode.Metrics)
 
@@ -250,6 +259,9 @@ func (sSum StatIndexSummary) Aggregate() []StatIndexAggNode {
 type StatDataAggNode struct {
 	Key StatDataKey
 
+	N      int64
+	Errors int64
+
 	Metrics AggNode
 	Points  AggNode
 	Bytes   AggNode
@@ -259,20 +271,74 @@ type StatDataAggNode struct {
 	DataTime      AggNode
 }
 
+func LessDataAggP99ByRows(a, b *StatDataAggNode) bool {
+	if a.DataReadRows.P99 == b.DataReadRows.P99 {
+		return a.DataReadRows.Max < b.DataReadRows.Max
+	}
+	return a.DataReadRows.P99 < b.DataReadRows.P99
+}
+
+func LessDataAggP95ByRows(a, b *StatDataAggNode) bool {
+	if a.DataReadRows.P95 == b.DataReadRows.P95 {
+		return a.DataReadRows.Max < b.DataReadRows.Max
+	}
+	return a.DataReadRows.P95 < b.DataReadRows.P95
+}
+
+func LessDataAggP90ByRows(a, b *StatDataAggNode) bool {
+	if a.DataReadRows.P90 == b.DataReadRows.P90 {
+		return a.DataReadRows.Max < b.DataReadRows.Max
+	}
+	return a.DataReadRows.P90 < b.DataReadRows.P90
+}
+
+func LessDataAggMedianByRows(a, b *StatDataAggNode) bool {
+	if a.DataReadRows.Median == b.DataReadRows.Median {
+		return a.DataReadRows.Max < b.DataReadRows.Max
+	}
+	return a.DataReadRows.Median < b.DataReadRows.Median
+}
+
+func LessDataAggMaxByRows(a, b *StatDataAggNode) bool {
+	if a.DataReadRows.Max == b.DataReadRows.Max {
+		return a.DataReadRows.P95 < b.DataReadRows.P95
+	}
+	return a.DataReadRows.Max < b.DataReadRows.Max
+}
+
+func LessDataAggSumByRows(a, b *StatDataAggNode) bool {
+	if a.DataReadRows.Sum == b.DataReadRows.Sum {
+		return a.DataReadRows.P95 < b.DataReadRows.P95
+	}
+	return a.DataReadRows.Sum < b.DataReadRows.Sum
+}
+
+func LessDataAggSumByErrors(a, b *StatDataAggNode) bool {
+	aErrors := int(1000.0 * float64(a.Errors) / float64(a.N))
+	bErrors := int(1000.0 * float64(b.Errors) / float64(b.N))
+	if aErrors == bErrors {
+		if a.Errors == b.Errors {
+			return a.DataTime.P95 < b.DataTime.P95
+		}
+		return a.Errors < b.Errors
+	}
+	return aErrors < bErrors
+}
+
 type StatDataNode struct {
 	N      int64
 	Errors int64
 
-	Error map[string]bool
-
 	Ids []string
+
+	RequestStatuses []int64
 
 	Metrics []float64
 	Points  []float64
 	Bytes   []float64
 
 	RequestTime   []float64
-	RequestStatus map[int64]int64
+	RequestErrors map[int64]map[string]int64
 
 	IndexCacheHit  int64
 	IndexCacheMiss int64
@@ -300,25 +366,26 @@ func NewStatDataSummary() StatDataSummary {
 }
 
 func (sSum StatDataSummary) Append(s *stat.Stat) {
+	if s.DataStatus == stat.StatusNone {
+		return
+	}
+
 	duration := (time.Duration(s.Until-s.From) * time.Second).Truncate(time.Minute)
 	key := StatDataKey{Target: s.Target, Duration: duration, DataTable: s.DataTable, RequestType: s.RequestType}
 	sNode, ok := sSum[key]
 	if !ok {
 		sNode = &StatDataNode{}
-		sNode.RequestStatus = make(map[int64]int64)
+		sNode.RequestErrors = make(map[int64]map[string]int64)
 		sSum[key] = sNode
 	}
 
 	sNode.N++
 
+	sNode.RequestStatuses = append(sNode.RequestStatuses, s.RequestStatus)
+
 	sNode.Ids = append(sNode.Ids, s.Id)
 
-	sNode.Metrics = append(sNode.Metrics, float64(s.Metrics))
-	sNode.Points = append(sNode.Points, float64(s.Points))
-	sNode.Bytes = append(sNode.Bytes, float64(s.Bytes))
-
 	sNode.RequestTime = append(sNode.RequestTime, s.RequestTime)
-	sNode.RequestStatus[s.RequestStatus]++
 
 	if s.IndexStatus == stat.StatusCached {
 		sNode.IndexCacheHit++
@@ -328,17 +395,25 @@ func (sSum StatDataSummary) Append(s *stat.Stat) {
 
 	if s.DataStatus == stat.StatusError {
 		sNode.Errors++
-		if sNode.Error == nil {
-			sNode.Error = make(map[string]bool)
+		errorMap, ok := sNode.RequestErrors[s.RequestStatus]
+		if !ok {
+			errorMap = make(map[string]int64)
+			sNode.RequestErrors[s.RequestStatus] = errorMap
 		}
-		sNode.Error[s.Error] = true
+		errorMap[s.Error]++
 	}
 
-	sNode.DataReadRows = append(sNode.DataReadRows, float64(s.DataReadRows))
-	sNode.DataReadBytes = append(sNode.DataReadBytes, float64(s.DataReadBytes))
-	sNode.DataTime = append(sNode.DataTime, s.DataTime)
-
 	sNode.DataQueryIds = append(sNode.DataQueryIds, s.DataQueryId)
+
+	if s.DataReadRows > 0 || s.Metrics > 0 {
+		sNode.Metrics = append(sNode.Metrics, float64(s.Metrics))
+		sNode.Points = append(sNode.Points, float64(s.Points))
+		sNode.Bytes = append(sNode.Bytes, float64(s.Bytes))
+
+		sNode.DataReadRows = append(sNode.DataReadRows, float64(s.DataReadRows))
+		sNode.DataReadBytes = append(sNode.DataReadBytes, float64(s.DataReadBytes))
+		sNode.DataTime = append(sNode.DataTime, s.DataTime)
+	}
 }
 
 func (sSum StatDataSummary) Aggregate() []StatDataAggNode {
@@ -347,6 +422,9 @@ func (sSum StatDataSummary) Aggregate() []StatDataAggNode {
 	var i int
 	for k, statNode := range sSum {
 		aggStat[i].Key = k
+
+		aggStat[i].N = statNode.N
+		aggStat[i].Errors = statNode.Errors
 
 		aggStat[i].Metrics.Calc(statNode.Metrics)
 		aggStat[i].Points.Calc(statNode.Points)

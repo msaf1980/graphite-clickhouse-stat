@@ -2,6 +2,7 @@ package aggregate
 
 import (
 	"reflect"
+	"sort"
 	"testing"
 	"time"
 
@@ -87,33 +88,54 @@ func Test_statSummary_append(t *testing.T) {
 			DataTable:     "graphite_hist",
 			DataQueryId:   "points_3",
 		},
+		{
+			Id:     "4",
+			Target: "test.*",
+
+			From:  0,
+			Until: int64(time.Minute / time.Second),
+
+			RequestType:   "render",
+			RequestTime:   30.0,
+			RequestStatus: 504,
+
+			Error: "timeout",
+
+			IndexStatus:  stat.StatusError,
+			IndexTime:    30.0,
+			IndexTable:   "graphite_index",
+			IndexQueryId: "Index_4",
+		},
 	}
 
 	wantStatIndexSum := StatIndexSummary{
 		{Target: "test.*", Duration: time.Minute, IndexTable: "graphite_index", RequestType: "render"}: &StatIndexNode{
-			N: 1,
+			N:      2,
+			Errors: 1,
 
-			Ids: []string{"1"},
+			Ids: []string{"1", "4"},
 
 			Metrics: []float64{10},
 
-			RequestStatus: map[int64]int64{200: 1},
+			RequestErrors: map[int64]map[string]int64{504: {"timeout": 1}},
 
 			IndexReadRows:  []float64{1000},
 			IndexReadBytes: []float64{10000},
-			IndexTime:      []float64{0.1},
+			IndexTime:      []float64{0.1, 30.0},
 
-			IndexQueryIds: []string{"Index_1"},
+			IndexQueryIds: []string{"Index_1", "Index_4"},
 		},
 	}
 
 	wantStatIndexAgg := []StatIndexAggNode{
 		{
 			Key:            StatIndexKey{Target: "test.*", Duration: time.Minute, IndexTable: "graphite_index", RequestType: "render"},
+			N:              2,
+			Errors:         1,
 			Metrics:        AggNode{Min: 10, Max: 10, Median: 10, P90: 10, P95: 10, P99: 10, Sum: 10},
 			IndexReadRows:  AggNode{Min: 1000, Max: 1000, Median: 1000, P90: 1000, P95: 1000, P99: 1000, Sum: 1000},
 			IndexReadBytes: AggNode{Min: 10000, Max: 10000, Median: 10000, P90: 10000, P95: 10000, P99: 10000, Sum: 10000},
-			IndexTime:      AggNode{Min: 0.1, Max: 0.1, Median: 0.1, P90: 0.1, P95: 0.1, P99: 0.1, Sum: 0.1},
+			IndexTime:      AggNode{Min: 0.1, Max: 30.0, Median: 0.1, P90: 15.05, P95: 15.05, P99: 15.05, Sum: 30.1},
 		},
 	}
 
@@ -123,12 +145,14 @@ func Test_statSummary_append(t *testing.T) {
 
 			Ids: []string{"1", "2"},
 
+			RequestStatuses: []int64{200, 200},
+
 			Metrics: []float64{10, 10},
 			Points:  []float64{20, 20},
 			Bytes:   []float64{110000, 90000},
 
 			RequestTime:   []float64{0.3, 0.1},
-			RequestStatus: map[int64]int64{200: 2},
+			RequestErrors: map[int64]map[string]int64{},
 
 			IndexCacheHit:  1,
 			IndexCacheMiss: 1,
@@ -144,6 +168,8 @@ func Test_statSummary_append(t *testing.T) {
 
 			Ids: []string{"3"},
 
+			RequestStatuses: []int64{200},
+
 			Metrics: []float64{10},
 			Points:  []float64{200},
 			Bytes:   []float64{900000},
@@ -152,7 +178,7 @@ func Test_statSummary_append(t *testing.T) {
 			IndexCacheMiss: 0,
 
 			RequestTime:   []float64{1.0},
-			RequestStatus: map[int64]int64{200: 1},
+			RequestErrors: map[int64]map[string]int64{},
 
 			DataReadRows:  []float64{100000},
 			DataReadBytes: []float64{1000000},
@@ -165,6 +191,7 @@ func Test_statSummary_append(t *testing.T) {
 	wantStatDataAgg := []StatDataAggNode{
 		{
 			Key:           StatDataKey{Target: "test.*", Duration: time.Minute, DataTable: "graphite", RequestType: "render"},
+			N:             2,
 			Metrics:       AggNode{Min: 10, Max: 10, Median: 10, P90: 10, P95: 10, P99: 10, Sum: 20},
 			Points:        AggNode{Min: 20, Max: 20, Median: 20, P90: 20, P95: 20, P99: 20, Sum: 40},
 			Bytes:         AggNode{Min: 90000, Max: 110000, Median: 90000, P90: 100000, P95: 100000, P99: 100000, Sum: 90000 + 110000},
@@ -174,6 +201,7 @@ func Test_statSummary_append(t *testing.T) {
 		},
 		{
 			Key:           StatDataKey{Target: "test.*", Duration: time.Minute * 10, DataTable: "graphite_hist", RequestType: "render"},
+			N:             1,
 			Metrics:       AggNode{Min: 10, Max: 10, Median: 10, P90: 10, P95: 10, P99: 10, Sum: 10},
 			Points:        AggNode{Min: 200, Max: 200, Median: 200, P90: 200, P95: 200, P99: 200, Sum: 200},
 			Bytes:         AggNode{Min: 900000, Max: 900000, Median: 900000, P90: 900000, P95: 900000, P99: 900000, Sum: 900000},
@@ -193,6 +221,13 @@ func Test_statSummary_append(t *testing.T) {
 
 	if reflect.DeepEqual(statIndexSum, wantStatIndexSum) {
 		statIndexAgg := statIndexSum.Aggregate()
+
+		sort.SliceStable(statIndexAgg, func(i, j int) bool {
+			if statIndexAgg[i].Key.Target == statIndexAgg[j].Key.Target {
+				return statIndexAgg[i].Key.Duration < statIndexAgg[j].Key.Duration
+			}
+			return statIndexAgg[i].Key.Target < statIndexAgg[j].Key.Target
+		})
 
 		// print Index agg stat diff
 		maxLen := len(statIndexAgg)
@@ -230,6 +265,13 @@ func Test_statSummary_append(t *testing.T) {
 
 	if reflect.DeepEqual(statDataSum, wantStatDataSum) {
 		statDataAgg := statDataSum.Aggregate()
+
+		sort.SliceStable(statDataAgg, func(i, j int) bool {
+			if statDataAgg[i].Key.Target == statDataAgg[j].Key.Target {
+				return statDataAgg[i].Key.Duration < statDataAgg[j].Key.Duration
+			}
+			return statDataAgg[i].Key.Target < statDataAgg[j].Key.Target
+		})
 
 		// print Data agg stat diff
 		maxLen := len(statDataAgg)
