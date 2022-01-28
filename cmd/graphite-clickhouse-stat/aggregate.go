@@ -34,6 +34,22 @@ func printCount(n, errors int64) {
 	fmt.Printf("%6d | %6d |", n, errors)
 }
 
+func printIndexHeader() {
+	fmt.Printf("%15s |", "index cache")
+}
+
+func printIndexHitHeader() {
+	fmt.Printf("%6s | %6s |", "hits", "miss")
+}
+
+func printIndexHit(hits, miss int64) {
+	fmt.Printf("%6d | %6d |", hits, miss)
+}
+
+func printIndexFooter() {
+	fmt.Printf("%15s |", "---------------")
+}
+
 func printCountBlank() {
 	fmt.Printf("%15s |", "")
 }
@@ -280,7 +296,7 @@ func aggRun(cmd *cobra.Command, args []string) {
 		printAggTimeNode("time", &aggStat.DataTime)
 		printTableAndDuration(aggStat.Key.RequestType, aggStat.Key.DataTable, aggStat.Key.Duration.String())
 
-		printCountBlank()
+		printIndexFooter()
 		printAggNode("metrics", &aggStat.Metrics, 0)
 		queryIds := aggSum.DataQueryIds
 		fmt.Printf(" IDs: %s", queryIds[0])
@@ -292,19 +308,19 @@ func aggRun(cmd *cobra.Command, args []string) {
 		}
 		printEndline()
 
-		printCountBlank()
+		printIndexHeader()
 		printAggNode("points", &aggStat.Points, 0)
 		printEndline()
 
-		printCountBlank()
+		printIndexHitHeader()
 		printAggNode("bytes", &aggStat.Bytes, 0)
 		printEndline()
 
-		printCountBlank()
+		printIndexFooter()
 		printAggNode("chrows", &aggStat.DataReadRows, 0)
 		printEndline()
 
-		printCountBlank()
+		printIndexHit(aggSum.IndexCacheHit, aggSum.IndexCacheMiss)
 		printAggNode("chsize", &aggStat.DataReadBytes, 0)
 		printTarget(aggStat.Key.Target)
 
@@ -332,52 +348,50 @@ func aggRun(cmd *cobra.Command, args []string) {
 	printFooter()
 	for i := n; i < len(statDataAgg); i++ {
 		aggStat := statDataAgg[i]
-		if aggStat.Errors > 0 {
-			aggSum := statDataSum[aggStat.Key]
+		aggSum := statDataSum[aggStat.Key]
 
-			printCount(aggSum.N, aggSum.Errors)
-			printAggTimeNode("time", &aggStat.DataTime)
-			printTableAndDuration(aggStat.Key.RequestType, aggStat.Key.DataTable, aggStat.Key.Duration.String())
+		printCount(aggSum.N, aggSum.Errors)
+		printAggTimeNode("time", &aggStat.DataTime)
+		printTableAndDuration(aggStat.Key.RequestType, aggStat.Key.DataTable, aggStat.Key.Duration.String())
 
-			printCountBlank()
-			printAggNode("metrics", &aggStat.Metrics, 0)
-			queryIds := aggSum.DataQueryIds
-			fmt.Printf(" IDs: %s", queryIds[0])
-			if len(queryIds) > 2 {
-				fmt.Printf(" .. %s", queryIds[len(queryIds)/2])
-			}
-			if len(queryIds) > 1 {
-				fmt.Printf(" .. %s", queryIds[len(queryIds)-1])
-			}
-			printEndline()
+		printIndexFooter()
+		printAggNode("metrics", &aggStat.Metrics, 0)
+		queryIds := aggSum.DataQueryIds
+		fmt.Printf(" IDs: %s", queryIds[0])
+		if len(queryIds) > 2 {
+			fmt.Printf(" .. %s", queryIds[len(queryIds)/2])
+		}
+		if len(queryIds) > 1 {
+			fmt.Printf(" .. %s", queryIds[len(queryIds)-1])
+		}
+		printEndline()
 
-			printCountBlank()
-			printAggNode("points", &aggStat.Points, 0)
-			printEndline()
+		printIndexHeader()
+		printAggNode("points", &aggStat.Points, 0)
+		printEndline()
 
-			printCountBlank()
-			printAggNode("bytes", &aggStat.Bytes, 0)
-			printEndline()
+		printIndexHitHeader()
+		printAggNode("bytes", &aggStat.Bytes, 0)
+		printEndline()
 
-			printCountBlank()
-			printAggNode("chrows", &aggStat.DataReadRows, 0)
-			printEndline()
+		printIndexFooter()
+		printAggNode("chrows", &aggStat.DataReadRows, 0)
+		printEndline()
 
-			printCountBlank()
-			printAggNode("chsize", &aggStat.DataReadBytes, 0)
-			printTarget(aggStat.Key.Target)
+		printIndexHit(aggSum.IndexCacheHit, aggSum.IndexCacheMiss)
+		printAggNode("chsize", &aggStat.DataReadBytes, 0)
+		printTarget(aggStat.Key.Target)
 
-			if len(aggSum.RequestErrors) > 0 {
-				for respStatus, errMap := range aggSum.RequestErrors {
-					fmt.Printf(" Errors with status %d:\n", respStatus)
-					for err, count := range errMap {
-						fmt.Printf("        %d: %s\n", count, err)
-					}
+		if len(aggSum.RequestErrors) > 0 {
+			for respStatus, errMap := range aggSum.RequestErrors {
+				fmt.Printf(" Errors with status %d:\n", respStatus)
+				for err, count := range errMap {
+					fmt.Printf("        %d: %s\n", count, err)
 				}
 			}
-
-			printFooter()
 		}
+
+		printFooter()
 	}
 	printEndline()
 }
