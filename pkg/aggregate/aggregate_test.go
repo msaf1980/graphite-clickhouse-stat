@@ -2,308 +2,247 @@ package aggregate
 
 import (
 	"reflect"
-	"sort"
 	"testing"
-	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/msaf1980/graphite-clickhouse-stat/pkg/stat"
 )
 
-func Test_statSummary_append(t *testing.T) {
+func Test_StatSummary_append(t *testing.T) {
 	stats := []*stat.Stat{
 		{
-			Id:     "1",
-			Target: "test.*",
-
-			Metrics: 10,
-			Points:  20,
-			Bytes:   110000,
-
-			From:  0,
-			Until: int64(time.Minute / time.Second),
-
-			RequestType:   "render",
-			RequestTime:   0.3,
-			RequestStatus: 200,
-
-			IndexStatus:    stat.StatusSuccess,
-			IndexReadRows:  1000,
-			IndexReadBytes: 10000,
-			IndexTime:      0.1,
-			IndexTable:     "graphite_index",
-			IndexQueryId:   "Index_1",
-
-			DataStatus:    stat.StatusSuccess,
-			DataReadRows:  10000,
-			DataReadBytes: 100000,
-			DataTime:      0.2,
-			DataTable:     "graphite",
-			DataQueryId:   "points_1",
+			RequestType: "render", Id: "1f72e822bed05bebd97a9bdcc4654f1a",
+			TimeStamp:     1674288343773000000,
+			Metrics:       1,
+			Points:        4,
+			Bytes:         148,
+			RequestStatus: 200, RequestTime: 3, QueryTime: 3,
+			WaitStatus: stat.StatusSuccess,
+			ReadRows:   414 + 12284, ReadBytes: 14168 + 2497094,
+			Queries:       []stat.Query{{Query: "test.a", Days: 1, From: 1674288343 - 60, Until: 1674288343}},
+			IndexReadRows: 414, IndexReadBytes: 14168,
+			Index: []stat.IndexStat{
+				{
+					Status: stat.StatusSuccess, Time: 1,
+					ReadRows: 2414, ReadBytes: 1416887,
+					Table:   "graphite_indexd",
+					QueryId: "1f72e822bed05bebd97a9bdcc4654f1a::1390f060ca3d959d",
+					Days:    1,
+				},
+			},
+			DataReadRows: 12284, DataReadBytes: 16497094,
+			Data: []stat.DataStat{
+				{
+					Status: stat.StatusSuccess, Time: 2,
+					ReadRows: 12284, ReadBytes: 2497094,
+					Table:   "graphite_reversed",
+					QueryId: "1f72e822bed05bebd97a9bdcc4654f1a::1b87069be1c53ee2",
+					Days:    1, From: 1674288230, Until: 1674288349,
+				},
+			},
 		},
 		{
-			Id:     "2",
-			Target: "test.*",
-
-			Metrics: 10,
-			Points:  20,
-			Bytes:   90000,
-
-			From:  int64(time.Minute / time.Second),
-			Until: int64(time.Minute/time.Second) * 2,
-
-			RequestType:   "render",
-			RequestTime:   0.1,
-			RequestStatus: 200,
-
-			IndexStatus: stat.StatusCached,
-
-			DataStatus:    stat.StatusSuccess,
-			DataReadRows:  9000,
-			DataReadBytes: 90000,
-			DataTime:      0.1,
-			DataTable:     "graphite",
-			DataQueryId:   "points_2",
+			RequestType: "render", Id: "1f72e822bed05bebd97a9bdcc4654f1b",
+			TimeStamp:     1674288343773000000,
+			Metrics:       1,
+			Points:        4,
+			Bytes:         148,
+			RequestStatus: 200, RequestTime: 2, QueryTime: 2,
+			WaitStatus: stat.StatusSuccess,
+			ReadRows:   12284, ReadBytes: 2497094,
+			Queries: []stat.Query{{Query: "test.a", Days: 1, From: 1674288403 - 3600*25, Until: 1674288403 - 3600*24}},
+			Index: []stat.IndexStat{
+				{Status: stat.StatusCached, Days: 1},
+			},
+			DataReadRows: 12284, DataReadBytes: 16497094,
+			Data: []stat.DataStat{
+				{
+					Status: stat.StatusSuccess, Time: 2,
+					ReadRows: 12284, ReadBytes: 2497094,
+					Table:   "graphite_reversed",
+					QueryId: "1f72e822bed05bebd97a9bdcc4654f1b::1b87069be1c53ee2",
+					Days:    1, From: 1674288403 - 3600*25, Until: 1674288403 - 3600*24,
+				},
+			},
 		},
 		{
-			Id:     "3",
-			Target: "test.*",
-
-			Metrics: 10,
-			Points:  200,
-			Bytes:   900000,
-
-			From:  0,
-			Until: int64(time.Minute/time.Second) * 10,
-
-			RequestType:   "render",
-			RequestTime:   1.0,
-			RequestStatus: 200,
-
-			IndexStatus: stat.StatusCached,
-
-			DataStatus:    stat.StatusSuccess,
-			DataReadRows:  100000,
-			DataReadBytes: 1000000,
-			DataTime:      2,
-			DataTable:     "graphite_hist",
-			DataQueryId:   "points_3",
+			RequestType: "render", Id: "1f72e822bed05bebd97a9bdcc4654f1c",
+			TimeStamp:     1674288343773000000,
+			Metrics:       1,
+			RequestStatus: 504, RequestTime: 10, QueryTime: 10,
+			WaitStatus: stat.StatusSuccess,
+			Queries:    []stat.Query{{Query: "test.a", Days: 1, From: 1674288403 - 3600*25, Until: 1674288403 - 3600*24}},
+			Index: []stat.IndexStat{
+				{Status: stat.StatusCached, Days: 1},
+			},
+			Data: []stat.DataStat{
+				{
+					Status: stat.StatusError, Time: 10,
+					Days: 1, From: 1674288403 - 3600*25, Until: 1674288403 - 3600*24,
+				},
+			},
 		},
 		{
-			Id:     "4",
-			Target: "test.*",
-
-			From:  0,
-			Until: int64(time.Minute / time.Second),
-
-			RequestType:   "render",
-			RequestTime:   30.0,
-			RequestStatus: 504,
-
-			Error: "timeout",
-
-			IndexStatus:  stat.StatusError,
-			IndexTime:    30.0,
-			IndexTable:   "graphite_index",
-			IndexQueryId: "Index_4",
+			RequestType: "render", Id: "1f72e822bed05bebd97a9bdcc4654f1d",
+			TimeStamp:     1674288343773000000,
+			Metrics:       1,
+			RequestStatus: 504, RequestTime: 10, QueryTime: 10,
+			WaitStatus: stat.StatusSuccess,
+			Queries:    []stat.Query{{Query: "test.a", Days: 1, From: 1674288403 - 3600*25, Until: 1674288403 - 3600*24}},
+			Index: []stat.IndexStat{
+				{Status: stat.StatusError, Time: 10, Days: 1},
+			},
+			Data: []stat.DataStat{},
 		},
 	}
 
-	wantStatIndexSum := StatIndexSummary{
-		{Target: "test.*", Duration: time.Minute, IndexTable: "graphite_index", RequestType: "render"}: &StatIndexNode{
-			N:      2,
-			Errors: 1,
-
-			Ids: []string{"1", "4"},
-
-			Metrics: []float64{10},
-
-			RequestErrors: map[int64]map[string]int64{504: {"timeout": 1}},
-
-			IndexReadRows:  []float64{1000},
-			IndexReadBytes: []float64{10000},
-			IndexTime:      []float64{0.1, 30.0},
-
-			IndexQueryIds: []string{"Index_1", "Index_4"},
+	wantAggStatSum := &StatAggSum{
+		Index: map[LabelKey][]*StatIndexAggNode{
+			{DurationLabel: "1d", RequestType: "render"}: {
+				{
+					IndexKey: StatKey{
+						Queries: "[{query='test.a',index=1d}]", DurationLabel: "1d", RequestType: "render",
+					},
+					Queries:  []StatQuery{{Query: "test.a", DurationLabel: "1d"}},
+					SampleId: "1f72e822bed05bebd97a9bdcc4654f1a", ErrorId: "1f72e822bed05bebd97a9bdcc4654f1d",
+					N: 4, ErrorsPcnt: 25, IndexCacheHitPcnt: 66.66666666666666,
+					// IndexN:    AggNode{Min: 1, Max: 1, P50: 1, P90: 1, P95: 1, P99: 1},
+					Metrics:   AggNode{Min: 1, Max: 1, P50: 1, P90: 1, P95: 1, P99: 1},
+					ReadRows:  AggNode{Min: 0, Max: 414, P50: 0, P90: 207, P95: 207, P99: 207},
+					ReadBytes: AggNode{Min: 0, Max: 14168, P50: 0, P90: 7084, P95: 7084, P99: 7084},
+					Times:     AggNode{Min: 0, Max: 10, P50: 0, P90: 5.5, P95: 5.5, P99: 5.5},
+				},
+			},
+		},
+		Requests: map[LabelKey][]*StatRequestAggNode{
+			{DurationLabel: "10m", RequestType: "render"}: {
+				{
+					IndexKey: StatKey{Queries: "[{query='test.a',index=1d}]", DurationLabel: "1d", RequestType: "render"},
+					DataKey:  StatKey{Queries: "[{query='test.a',render=10m}]", DurationLabel: "10m", RequestType: "render"},
+					Queries:  []StatQuery{{Query: "test.a", DurationLabel: "10m"}},
+					SampleId: "1f72e822bed05bebd97a9bdcc4654f1a",
+					N:        1, RequestStatus: map[int64]int64{200: 1},
+					Metrics:       AggNode{Min: 1, Max: 1, P50: 1, P90: 1, P95: 1, P99: 1},
+					Points:        AggNode{Min: 4, Max: 4, P50: 4, P90: 4, P95: 4, P99: 4},
+					ReadRows:      AggNode{Min: 12698, Max: 12698, P50: 12698, P90: 12698, P95: 12698, P99: 12698},
+					ReadBytes:     AggNode{Min: 2511262, Max: 2511262, P50: 2511262, P90: 2511262, P95: 2511262, P99: 2511262},
+					DataReadRows:  AggNode{Min: 12284, Max: 12284, P50: 12284, P90: 12284, P95: 12284, P99: 12284},
+					DataReadBytes: AggNode{Min: 16497094, Max: 16497094, P50: 16497094, P90: 16497094, P95: 16497094, P99: 16497094},
+					RequestTimes:  AggNode{Min: 3, Max: 3, P50: 3, P90: 3, P95: 3, P99: 3},
+					QueryTimes:    AggNode{Min: 3, Max: 3, P50: 3, P90: 3, P95: 3, P99: 3},
+					DataTimes:     AggNode{Min: 2, Max: 2, P50: 2, P90: 2, P95: 2, P99: 2},
+				},
+			},
+			{DurationLabel: "1h", RequestType: "render"}: {
+				{
+					IndexKey: StatKey{Queries: "[{query='test.a',index=1d}]", DurationLabel: "1d", RequestType: "render"},
+					DataKey:  StatKey{Queries: "[{query='test.a',render=1h}]", DurationLabel: "1h", RequestType: "render"},
+					Queries:  []StatQuery{{Query: "test.a", DurationLabel: "1h"}},
+					SampleId: "1f72e822bed05bebd97a9bdcc4654f1b",
+					// SampleQueryIds: []string{"1f72e822bed05bebd97a9bdcc4654f1b::1b87069be1c53ee2"},
+					ErrorId: "1f72e822bed05bebd97a9bdcc4654f1c",
+					N:       3, ErrorsPcnt: 66.66666666666666, RequestStatus: map[int64]int64{200: 1, 504: 2},
+					DataErrorsPcnt: 33.33333333333333, IndexErrorsPcnt: 33.33333333333333, IndexCacheHitPcnt: 100,
+					Metrics:       AggNode{Min: 1, Max: 1, P50: 1, P90: 1, P95: 1, P99: 1},
+					Points:        AggNode{Min: 4, Max: 4, P50: 4, P90: 4, P95: 4, P99: 4},
+					ReadRows:      AggNode{Min: 12284, Max: 12284, P50: 12284, P90: 12284, P95: 12284, P99: 12284},
+					ReadBytes:     AggNode{Min: 2497094, Max: 2497094, P50: 2497094, P90: 2497094, P95: 2497094, P99: 2497094},
+					RequestTimes:  AggNode{Min: 2, Max: 10, P50: 6, P90: 10, P95: 10, P99: 10},
+					QueryTimes:    AggNode{Min: 2, Max: 10, P50: 6, P90: 10, P95: 10, P99: 10},
+					DataReadRows:  AggNode{Min: 12284, Max: 12284, P50: 12284, P90: 12284, P95: 12284, P99: 12284},
+					DataReadBytes: AggNode{Min: 16497094, Max: 16497094, P50: 16497094, P90: 16497094, P95: 16497094, P99: 16497094},
+					DataTimes:     AggNode{Min: 2, Max: 10, P50: 2, P90: 6, P95: 6, P99: 6},
+				},
+			},
 		},
 	}
 
-	wantStatIndexAgg := []StatIndexAggNode{
-		{
-			Key:            StatIndexKey{Target: "test.*", Duration: time.Minute, IndexTable: "graphite_index", RequestType: "render"},
-			N:              2,
-			Errors:         1,
-			Metrics:        AggNode{Min: 10, Max: 10, Median: 10, P90: 10, P95: 10, P99: 10, Sum: 10},
-			IndexReadRows:  AggNode{Min: 1000, Max: 1000, Median: 1000, P90: 1000, P95: 1000, P99: 1000, Sum: 1000},
-			IndexReadBytes: AggNode{Min: 10000, Max: 10000, Median: 10000, P90: 10000, P95: 10000, P99: 10000, Sum: 10000},
-			IndexTime:      AggNode{Min: 0.1, Max: 30.0, Median: 0.1, P90: 15.05, P95: 15.05, P99: 15.05, Sum: 30.1},
-		},
-	}
-
-	wantStatDataSum := StatDataSummary{
-		{Target: "test.*", Duration: time.Minute, DataTable: "graphite", RequestType: "render"}: &StatDataNode{
-			N: 2,
-
-			Ids: []string{"1", "2"},
-
-			RequestStatuses: []int64{200, 200},
-
-			Metrics: []float64{10, 10},
-			Points:  []float64{20, 20},
-			Bytes:   []float64{110000, 90000},
-
-			RequestTime:   []float64{0.3, 0.1},
-			RequestErrors: map[int64]map[string]int64{},
-
-			IndexCacheHit:  1,
-			IndexCacheMiss: 1,
-
-			DataReadRows:  []float64{10000, 9000},
-			DataReadBytes: []float64{100000, 90000},
-			DataTime:      []float64{0.2, 0.1},
-
-			DataQueryIds: []string{"points_1", "points_2"},
-		},
-		{Target: "test.*", Duration: time.Minute * 10, DataTable: "graphite_hist", RequestType: "render"}: &StatDataNode{
-			N: 1,
-
-			Ids: []string{"3"},
-
-			RequestStatuses: []int64{200},
-
-			Metrics: []float64{10},
-			Points:  []float64{200},
-			Bytes:   []float64{900000},
-
-			IndexCacheHit:  1,
-			IndexCacheMiss: 0,
-
-			RequestTime:   []float64{1.0},
-			RequestErrors: map[int64]map[string]int64{},
-
-			DataReadRows:  []float64{100000},
-			DataReadBytes: []float64{1000000},
-			DataTime:      []float64{2.0},
-
-			DataQueryIds: []string{"points_3"},
-		},
-	}
-
-	wantStatDataAgg := []StatDataAggNode{
-		{
-			Key:           StatDataKey{Target: "test.*", Duration: time.Minute, DataTable: "graphite", RequestType: "render"},
-			N:             2,
-			Metrics:       AggNode{Min: 10, Max: 10, Median: 10, P90: 10, P95: 10, P99: 10, Sum: 20},
-			Points:        AggNode{Min: 20, Max: 20, Median: 20, P90: 20, P95: 20, P99: 20, Sum: 40},
-			Bytes:         AggNode{Min: 90000, Max: 110000, Median: 90000, P90: 100000, P95: 100000, P99: 100000, Sum: 90000 + 110000},
-			DataReadRows:  AggNode{Min: 9000, Max: 10000, Median: 9000, P90: 9500, P95: 9500, P99: 9500, Sum: 9000 + 10000},
-			DataReadBytes: AggNode{Min: 90000, Max: 100000, Median: 90000, P90: 95000, P95: 95000, P99: 95000, Sum: 90000 + 100000},
-			DataTime:      AggNode{Min: 0.1, Max: 0.2, Median: 0.1, P90: 0.15000000000000002, P95: 0.15000000000000002, P99: 0.15000000000000002, Sum: 0.30000000000000004},
-		},
-		{
-			Key:           StatDataKey{Target: "test.*", Duration: time.Minute * 10, DataTable: "graphite_hist", RequestType: "render"},
-			N:             1,
-			Metrics:       AggNode{Min: 10, Max: 10, Median: 10, P90: 10, P95: 10, P99: 10, Sum: 10},
-			Points:        AggNode{Min: 200, Max: 200, Median: 200, P90: 200, P95: 200, P99: 200, Sum: 200},
-			Bytes:         AggNode{Min: 900000, Max: 900000, Median: 900000, P90: 900000, P95: 900000, P99: 900000, Sum: 900000},
-			DataReadRows:  AggNode{Min: 100000, Max: 100000, Median: 100000, P90: 100000, P95: 100000, P99: 100000, Sum: 100000},
-			DataReadBytes: AggNode{Min: 1000000, Max: 1000000, Median: 1000000, P90: 1000000, P95: 1000000, P99: 1000000, Sum: 1000000},
-			DataTime:      AggNode{Min: 2.0, Max: 2.0, Median: 2.0, P90: 2.0, P95: 2.0, P99: 2.0, Sum: 2.0},
-		},
-	}
-
-	statIndexSum := NewStatIndexSummary()
-	statDataSum := NewStatDataSummary()
+	statSum := NewStatSummary()
 
 	for _, s := range stats {
-		statIndexSum.Append(s)
-		statDataSum.Append(s)
+		statSum.Append(s)
+	}
+	aggSum := statSum.Aggregate()
+
+	if !reflect.DeepEqual(aggSum, wantAggStatSum) {
+		t.Errorf("StatSummary.Append(...) = %s", cmp.Diff(wantAggStatSum, aggSum))
 	}
 
-	if reflect.DeepEqual(statIndexSum, wantStatIndexSum) {
-		statIndexAgg := statIndexSum.Aggregate()
+	// 	// print Index agg stat diff
+	// 	maxLen := len(statIndexAgg)
+	// 	if maxLen < len(wantStatIndexAgg) {
+	// 		maxLen = len(wantStatIndexAgg)
+	// 	}
+	// 	for i := 0; i < maxLen; i++ {
+	// 		if i < len(statIndexAgg) && i < len(wantStatIndexAgg) {
+	// 			if statIndexAgg[i] != wantStatIndexAgg[i] {
+	// 				t.Errorf("\n- agg index[%d] = %+v\n+ agg index[%d] = %+v\n", i, wantStatIndexAgg[i], i, statIndexAgg[i])
+	// 			}
+	// 		} else if i >= len(statIndexAgg) {
+	// 			t.Errorf("\n- agg index[%d] = %+v\n", i, wantStatIndexAgg[i])
+	// 		} else if maxLen >= len(wantStatIndexAgg) {
+	// 			t.Errorf("\n+ agg index[%d] = %+v\n", i, statIndexAgg[i])
+	// 		}
+	// 	}
+	// } else {
+	// 	// print Index stat diff
+	// 	for k, sNode := range statIndexSum {
+	// 		if wNode, ok := wantStatIndexSum[k]; ok {
+	// 			if !reflect.DeepEqual(*sNode, *wNode) {
+	// 				t.Errorf("\n- index[%+v] = %+v\n+ index[%+v] = %+v\n", k, *wNode, k, *sNode)
+	// 			}
+	// 		} else {
+	// 			t.Errorf("\n+ index[%+v] = %+v\n", k, *sNode)
+	// 		}
+	// 	}
+	// 	for k, wNode := range wantStatIndexSum {
+	// 		if _, ok := statIndexSum[k]; !ok {
+	// 			t.Errorf("\n- index[%+v] = %+v\n", k, *wNode)
+	// 		}
+	// 	}
+	// }
 
-		sort.SliceStable(statIndexAgg, func(i, j int) bool {
-			if statIndexAgg[i].Key.Target == statIndexAgg[j].Key.Target {
-				return statIndexAgg[i].Key.Duration < statIndexAgg[j].Key.Duration
-			}
-			return statIndexAgg[i].Key.Target < statIndexAgg[j].Key.Target
-		})
+	// if reflect.DeepEqual(statDataSum, wantStatDataSum) {
+	// 	statDataAgg := statDataSum.Aggregate()
 
-		// print Index agg stat diff
-		maxLen := len(statIndexAgg)
-		if maxLen < len(wantStatIndexAgg) {
-			maxLen = len(wantStatIndexAgg)
-		}
-		for i := 0; i < maxLen; i++ {
-			if i < len(statIndexAgg) && i < len(wantStatIndexAgg) {
-				if statIndexAgg[i] != wantStatIndexAgg[i] {
-					t.Errorf("\n- agg index[%d] = %+v\n+ agg index[%d] = %+v\n", i, wantStatIndexAgg[i], i, statIndexAgg[i])
-				}
-			} else if i >= len(statIndexAgg) {
-				t.Errorf("\n- agg index[%d] = %+v\n", i, wantStatIndexAgg[i])
-			} else if maxLen >= len(wantStatIndexAgg) {
-				t.Errorf("\n+ agg index[%d] = %+v\n", i, statIndexAgg[i])
-			}
-		}
-	} else {
-		// print Index stat diff
-		for k, sNode := range statIndexSum {
-			if wNode, ok := wantStatIndexSum[k]; ok {
-				if !reflect.DeepEqual(*sNode, *wNode) {
-					t.Errorf("\n- index[%+v] = %+v\n+ index[%+v] = %+v\n", k, *wNode, k, *sNode)
-				}
-			} else {
-				t.Errorf("\n+ index[%+v] = %+v\n", k, *sNode)
-			}
-		}
-		for k, wNode := range wantStatIndexSum {
-			if _, ok := statIndexSum[k]; !ok {
-				t.Errorf("\n- index[%+v] = %+v\n", k, *wNode)
-			}
-		}
-	}
+	// 	sort.SliceStable(statDataAgg, func(i, j int) bool {
+	// 		if statDataAgg[i].Key.Target == statDataAgg[j].Key.Target {
+	// 			return statDataAgg[i].Key.Duration < statDataAgg[j].Key.Duration
+	// 		}
+	// 		return statDataAgg[i].Key.Target < statDataAgg[j].Key.Target
+	// 	})
 
-	if reflect.DeepEqual(statDataSum, wantStatDataSum) {
-		statDataAgg := statDataSum.Aggregate()
-
-		sort.SliceStable(statDataAgg, func(i, j int) bool {
-			if statDataAgg[i].Key.Target == statDataAgg[j].Key.Target {
-				return statDataAgg[i].Key.Duration < statDataAgg[j].Key.Duration
-			}
-			return statDataAgg[i].Key.Target < statDataAgg[j].Key.Target
-		})
-
-		// print Data agg stat diff
-		maxLen := len(statDataAgg)
-		if maxLen < len(wantStatDataAgg) {
-			maxLen = len(wantStatDataAgg)
-		}
-		for i := 0; i < maxLen; i++ {
-			if i < len(statDataAgg) && i < len(wantStatDataAgg) {
-				if statDataAgg[i] != wantStatDataAgg[i] {
-					t.Errorf("\n- agg data[%d] = %+v\n+ agg data[%d] = %+v\n", i, wantStatDataAgg[i], i, statDataAgg[i])
-				}
-			} else if i >= len(statDataAgg) {
-				t.Errorf("\n- agg data[%d] = %+v\n", i, wantStatDataAgg[i])
-			} else if maxLen >= len(wantStatDataAgg) {
-				t.Errorf("\n+ agg data[%d] = %+v\n", i, statDataAgg[i])
-			}
-		}
-	} else {
-		// print Data stat diff
-		for k, sNode := range statDataSum {
-			if wNode, ok := wantStatDataSum[k]; ok {
-				if !reflect.DeepEqual(*sNode, *wNode) {
-					t.Errorf("\n- data[%+v] = %+v\n+ data[%+v] = %+v\n", k, *wNode, k, *sNode)
-				}
-			} else {
-				t.Errorf("\n+ data[%+v] = %+v\n", k, *sNode)
-			}
-		}
-		for k, wNode := range wantStatDataSum {
-			if _, ok := statDataSum[k]; !ok {
-				t.Errorf("\n- data[%+v] = %+v\n", k, *wNode)
-			}
-		}
-	}
+	// 	// print Data agg stat diff
+	// 	maxLen := len(statDataAgg)
+	// 	if maxLen < len(wantStatDataAgg) {
+	// 		maxLen = len(wantStatDataAgg)
+	// 	}
+	// 	for i := 0; i < maxLen; i++ {
+	// 		if i < len(statDataAgg) && i < len(wantStatDataAgg) {
+	// 			if statDataAgg[i] != wantStatDataAgg[i] {
+	// 				t.Errorf("\n- agg data[%d] = %+v\n+ agg data[%d] = %+v\n", i, wantStatDataAgg[i], i, statDataAgg[i])
+	// 			}
+	// 		} else if i >= len(statDataAgg) {
+	// 			t.Errorf("\n- agg data[%d] = %+v\n", i, wantStatDataAgg[i])
+	// 		} else if maxLen >= len(wantStatDataAgg) {
+	// 			t.Errorf("\n+ agg data[%d] = %+v\n", i, statDataAgg[i])
+	// 		}
+	// 	}
+	// } else {
+	// 	// print Data stat diff
+	// 	for k, sNode := range statDataSum {
+	// 		if wNode, ok := wantStatDataSum[k]; ok {
+	// 			if !reflect.DeepEqual(*sNode, *wNode) {
+	// 				t.Errorf("\n- data[%+v] = %+v\n+ data[%+v] = %+v\n", k, *wNode, k, *sNode)
+	// 			}
+	// 		} else {
+	// 			t.Errorf("\n+ data[%+v] = %+v\n", k, *sNode)
+	// 		}
+	// 	}
+	// 	for k, wNode := range wantStatDataSum {
+	// 		if _, ok := statDataSum[k]; !ok {
+	// 			t.Errorf("\n- data[%+v] = %+v\n", k, *wNode)
+	// 		}
+	// 	}
+	// }
 }

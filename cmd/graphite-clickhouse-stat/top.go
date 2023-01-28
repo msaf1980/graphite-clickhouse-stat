@@ -2,89 +2,120 @@ package main
 
 import (
 	"bufio"
-	"fmt"
+	"errors"
+	"io"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/goccy/go-json"
+	"github.com/msaf1980/go-clipper"
 	"github.com/msaf1980/graphite-clickhouse-stat/pkg/stat"
 	"github.com/msaf1980/graphite-clickhouse-stat/pkg/top"
-	"github.com/spf13/cobra"
 )
 
 type TopConfig struct {
-	Top      int
-	Duration time.Duration
-	Key      stat.Sort
+	Top       int
+	Duration  time.Duration
+	QuerySort stat.Sort
+	Verbose   bool
+
+	File string
+
+	From  time.Time
+	Until time.Time
 }
 
 var topConfig TopConfig
 
-func printTop(queries map[string]*stat.Stat, n int, sortKey stat.Sort, nonCompleted bool) {
-	stats := top.GetTop(queries, n, sortKey, nonCompleted)
+func printTop(queries map[string]*stat.Stat, n int, sortKey stat.Sort, from, until int64, cleanup bool) {
+	stats := top.GetTop(queries, n, sortKey, from, until, cleanup)
 	for _, s := range stats {
-		printStat(s.Id, s)
+		printStat(s.Id, s, topConfig.Verbose)
 	}
 }
 
-func topRun(cmd *cobra.Command, args []string) {
-	if len(args) > 0 {
-		fmt.Fprintf(os.Stderr, "unhandled args: %v\n", args)
-		cmd.Help()
-		os.Exit(1)
-	}
-
+func topRun() error {
 	if topConfig.Top <= 0 {
-		fmt.Fprintf(os.Stderr, "top must be > 0\n")
-		os.Exit(1)
+		return errors.New("top must be > 0")
 	}
 	if topConfig.Duration < time.Second {
-		fmt.Fprintf(os.Stderr, "flush duration must be >= 1s\n")
-		os.Exit(1)
+		return errors.New("flush duration must be >= 1s")
 	}
-
-	var logEntry map[string]interface{}
-	queries := make(map[string]*stat.Stat)
-
-	printHeader()
 
 	var timeStamp time.Time
 
-	scanner := bufio.NewScanner(os.Stdin)
+	var (
+		in    io.ReadCloser
+		err   error
+		from  int64
+		until int64
+	)
+	if topConfig.File == "" {
+		in = os.Stdin
+	} else {
+		if in, err = os.Open(topConfig.File); err != nil {
+			return err
+		}
+		defer in.Close()
+	}
+
+	queries := make(map[string]*stat.Stat)
+
+	if !topConfig.From.IsZero() {
+		from = topConfig.From.UnixNano()
+	}
+	if !topConfig.Until.IsZero() {
+		until = topConfig.Until.UnixNano()
+	}
+
+	scanner := bufio.NewScanner(in)
 	for scanner.Scan() {
-		err := json.Unmarshal(scanner.Bytes(), &logEntry)
+		var logEntry map[string]interface{}
+		line := scanner.Bytes()
+		err := json.Unmarshal(line, &logEntry)
 		if err == nil {
 			id := stat.LogEntryProcess(logEntry, queries)
-			if len(id) > 0 {
+			if id != "" {
 				s := queries[id]
+				print := true
+				if from > 0 && s.TimeStamp < from {
+					delete(queries, id)
+					continue
+				}
+				if print && until > 0 && s.TimeStamp >= until {
+					delete(queries, id)
+					continue
+				}
 				t := time.Unix(s.TimeStamp/1000000000, s.TimeStamp%100000000).Truncate(topConfig.Duration)
 				if timeStamp.IsZero() {
 					timeStamp = t
 				} else if timeStamp != t {
-					printTop(queries, topConfig.Top, topConfig.Key, false)
-					printFooter()
+					// next time round, flush  queries
+					printHeader(topConfig.Verbose)
+					printTop(queries, topConfig.Top, topConfig.QuerySort, from, until, true)
 					timeStamp = t
 				}
 			}
 		}
 	}
 
-	printTop(queries, topConfig.Top, topConfig.Key, true)
+	printTop(queries, topConfig.Top, topConfig.QuerySort, from, until, true)
+
+	return nil
 }
 
-func topFlags(rootCmd *cobra.Command) {
-	cmd := &cobra.Command{
-		Use:   "top",
-		Short: "Read from stdin and print top queries stat",
-		Run:   topRun,
-	}
+func registerTopCmd(registry *clipper.Registry) {
+	topCommand, _ := registry.RegisterWithCallback("top", "read from stdin and print top queries stat", topRun)
 
-	cmd.Flags().SortFlags = false
+	topCommand.AddFlag("verbose", "v", &topConfig.Verbose, "verbose")
+	topCommand.AddDuration("duration", "d", 10*time.Second, &topConfig.Duration, "flush duration")
 
-	cmd.Flags().IntVarP(&topConfig.Top, "top", "n", 10, "top queries")
-	cmd.Flags().DurationVarP(&topConfig.Duration, "duration", "d", 10*time.Second, "flush duration")
-	cmd.Flags().VarP(&topConfig.Key, "key", "k", "top key ("+strings.Join(stat.SortStrings(), " | ")+") ")
+	topCommand.AddInt("top", "n", 10, &topConfig.Top, "top queries")
+	topCommand.AddValue("sort", "s", &topConfig.QuerySort, false, "top sort by ("+strings.Join(stat.SortStrings(), " | ")+") ")
 
-	rootCmd.AddCommand(cmd)
+	topCommand.AddString("input", "i", "", &topConfig.File, "input log file or stdin")
+
+	topCommand.AddTime("from", "f", time.Time{}, &topConfig.From, dateTimeLayout, "start time (UTC)")
+	topCommand.AddTime("until", "u", time.Time{}, &topConfig.Until, dateTimeLayout, "end time (UTC)")
 }
