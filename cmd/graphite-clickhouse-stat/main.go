@@ -1,24 +1,24 @@
 package main
 
 import (
-	"log"
+	"fmt"
 	"os"
 
-	"github.com/spf13/cobra"
+	"github.com/msaf1980/go-clipper"
 )
 
 func main() {
-	var rootCmd = &cobra.Command{
-		Use:   os.Args[0],
-		Short: "graphite-clickhouse-stat is a graphite-clickhouse queries stat tool",
-	}
+	registry := clipper.NewRegistry("graphite-clickhouse queries stat tool")
 
-	printFlags(rootCmd)
-	topFlags(rootCmd)
-	aggFlags(rootCmd)
+	registry.RegisterHelp("help", "display help", true, true)
+	registry.Register("", "display help")
 
-	if err := rootCmd.Execute(); err != nil {
-		log.Fatalf("%s\n", err.Error())
+	registerPrintCmd(registry)
+	registerTopCmd(registry)
+	registerAggregateCmd(registry)
+
+	if _, err := registry.Parse(os.Args[1:]); err != nil {
+		fmt.Fprintf(os.Stderr, "%s\n", err.Error())
 		os.Exit(1)
 	}
 }

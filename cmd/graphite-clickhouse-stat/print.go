@@ -2,14 +2,15 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
 	"github.com/goccy/go-json"
-	"github.com/spf13/cobra"
-	"github.com/vjeantet/jodaTime"
 
+	"github.com/msaf1980/go-clipper"
 	"github.com/msaf1980/graphite-clickhouse-stat/pkg/stat"
 	"github.com/msaf1980/graphite-clickhouse-stat/pkg/utils"
 )
@@ -18,65 +19,115 @@ type PrintConfig struct {
 	MinRows      int64
 	MinTime      float64
 	IndexMinRows int64
-	IndexMinTime float64
-	Status       utils.Int64Slice
-	StatusSkip   utils.Int64Slice
+	DataMinRows  int64
+	// IndexMinTime float64
+	Status     []int64
+	StatusSkip []int64
+	Verbose    bool
+
+	From  time.Time
+	Until time.Time
+
+	File string
 }
 
 var printConfig PrintConfig
 
-func printHeader() {
-	fmt.Printf("%12s | %8s | %6s | %7s | %6s | %6s | %6s | %20s | %6s | %6s | %6s |S| %20s | %6s | %6s | %6s |S| %32s | %16s | %16s | %s\n",
-		"type", "time",
-		"rtime", "metrics", "points", "size", "status",
-		"index",
-		"time",
-		"chrows",
-		"chsize",
-		"data",
-		"time",
-		"chrows",
-		"chsize",
-		"request_id", "index_query", "data_query", "target",
-	)
-}
+var (
+	footerPrint      = headLine(204, '-')
+	labelFooterPrint = headLine(204, '=')
+)
 
 func printFooter() {
-	fmt.Println("-----------------------------------------------------------------------------------------------------------------------------------------------")
+	fmt.Println(footerPrint)
 }
 
-func printStat(id string, s *stat.Stat) {
-	if s.RequestTime > 0.0 {
-		fmt.Printf("%12s | %8s | %6.2f | %7s | %6s | %6s | %6d | %20s | %6.2f | %6s | %6s |%s| %20s | %6.2f | %6s | %6s |%s| %32s | %16s | %16s | %s\n",
-			s.RequestType,
-			jodaTime.Format("HH:mm:ss", time.Unix(s.TimeStamp/1000000000, 0)),
-			s.RequestTime, utils.FormatNumber(int64(s.Metrics)), utils.FormatNumber(int64(s.Points)), utils.FormatNumber(int64(s.Bytes)), s.RequestStatus,
-			s.IndexTable, s.IndexTime, utils.FormatNumber(s.IndexReadRows), utils.FormatNumber(s.IndexReadBytes), s.IndexStatus.String(),
-			s.DataTable, s.DataTime, utils.FormatNumber(s.DataReadRows), utils.FormatNumber(s.DataReadBytes), s.DataStatus.String(),
-			id, s.IndexQueryId, s.DataQueryId, s.Target,
+func printLabelFooter() {
+	fmt.Println(labelFooterPrint)
+}
+
+func printHeader(verbose bool) {
+	printFooter()
+	fmt.Printf("%19s | %3s | %10s | %10s | %10s |%s| %10s | %10s | %16s | %32s | %7s | %8s | %8s | %10s | %s\n",
+		"timestamp (UTC)", "S", "rtime", "wtime", "qtime", "W",
+		"read_rows", "read_bytes",
+		"type", "request_id", "metrics", "points", "size",
+		"iread_rows", "dread_rows",
+	)
+	if verbose {
+		printFooter()
+		fmt.Printf("%19s | %3s | %10s | %10s | %s\n",
+			"index days", "", "duration", "offset", "query",
 		)
-	} else if s.IndexTime+s.DataTime > 0.0 {
-		fmt.Printf("%12s | %8s | %6s | %7s | %6s | %6s | %6s | %20s | %6.2f | %6s | %6s |%s| %20s | %6.2f | %6s | %6s |%s| %32s | %16s | %16s | %s\n",
-			s.RequestType,
-			jodaTime.Format("HH:mm:ss", time.Unix(s.TimeStamp/1000000000, 0)),
-			"-", utils.FormatNumber(int64(s.Metrics)), utils.FormatNumber(int64(s.Points)), utils.FormatNumber(int64(s.Bytes)), "-",
-			s.IndexTable, s.IndexTime, utils.FormatNumber(s.IndexReadRows), utils.FormatNumber(s.IndexReadBytes), s.IndexStatus.String(),
-			s.DataTable, s.DataTime, utils.FormatNumber(s.DataReadRows), utils.FormatNumber(s.DataReadBytes), s.DataStatus.String(),
-			id, s.IndexQueryId, s.DataQueryId, s.Target,
+
+		printFooter()
+		// index/data stat
+		fmt.Printf("%19s | %3s | %10s | %10s | %10s |%s| %10s | %10s | %51s | %-29s | %s\n",
+			"index_days", "", "duration", "offset", "time", "S", "read_rows", "read_bytes", "query_id", "table", "error",
 		)
+	}
+	printFooter()
+}
+
+func headLine(n int, c byte) string {
+	out := make([]byte, 0, n)
+	for i := 0; i < n; i++ {
+		out = append(out, c)
+	}
+	return string(out)
+}
+
+func printStat(id string, s *stat.Stat, verbose bool) {
+
+	fmt.Printf("%19s | %3d | %10.2f | %10.2f | %10.2f |%s| %10s | %10s | %16s | %32s"+ // last - id
+		" | %7s | %8s | %8s | %10s | %s\n", // metrics, points, bytes, read_rows, read_bytes
+		time.Unix(s.TimeStamp/1e9, 0).UTC().Format("2006-01-02 15:04:05"),
+		s.RequestStatus,
+		s.RequestTime, s.WaitTime, s.QueryTime, s.WaitStatus.String(),
+		utils.FormatNumber(s.ReadRows), utils.FormatBytes(s.ReadBytes),
+		s.RequestType, id,
+		utils.FormatNumber(s.Metrics), utils.FormatNumber(s.Points), utils.FormatBytes(s.Bytes),
+		utils.FormatNumber(s.IndexReadRows), utils.FormatNumber(s.DataReadRows),
+	)
+	if verbose {
+		for _, q := range s.Queries {
+			var d, offset string
+			if q.From > 0 && q.Until > 0 {
+				d = utils.FormatTruncSeconds(q.Until - q.From)
+				offset = utils.FormatTruncSeconds(s.TimeStamp/1e9 - q.Until)
+			}
+			fmt.Printf("%19s | %3s | %10s | %10s | %s\n",
+				utils.FormatInt(q.Days), "", d, offset, q.Query,
+			)
+		}
+
+		// index stat
+		for _, q := range s.Index {
+			fmt.Printf("%19s | %3s | %10s | %10s | %10.2f |%s| %10s | %10s | %51s | %-29s | %s\n",
+				utils.FormatInt(q.Days), "", "", "",
+				q.Time, q.Status.String(),
+				utils.FormatNumber(q.ReadRows), utils.FormatBytes(q.ReadBytes), q.QueryId, q.Table, q.Error,
+			)
+		}
+		// data stat
+		for _, q := range s.Data {
+			var d, offset string
+			if q.From > 0 && q.Until > 0 {
+				d = utils.FormatTruncSeconds(q.Until - q.From)
+				offset = utils.FormatTruncSeconds(s.TimeStamp/1e9 - q.Until)
+			}
+			fmt.Printf("%19s | %3s | %10s | %10s | %10.2f |%s| %10s | %10s | %51s | %s\n",
+				utils.FormatInt(q.Days), "", d, offset,
+				q.Time, q.Status.String(),
+				utils.FormatNumber(q.ReadRows), utils.FormatBytes(q.ReadBytes), q.QueryId, q.Table,
+			)
+		}
 	}
 }
 
-func printRun(cmd *cobra.Command, args []string) {
-	if len(args) > 0 {
-		fmt.Fprintf(os.Stderr, "unhandled args: %v\n", args)
-		cmd.Help()
-		os.Exit(1)
-	}
+func printRun() error {
 	if len(printConfig.Status) > 0 && len(printConfig.StatusSkip) > 0 {
-		fmt.Fprintf(os.Stderr, "status and status-skip can't be coexist")
-		cmd.Help()
-		os.Exit(1)
+		return errors.New("status and status-skip can't be coexist")
 	}
 
 	var compare bool
@@ -88,8 +139,8 @@ func printRun(cmd *cobra.Command, args []string) {
 		compare = true
 	} else if printConfig.IndexMinRows > 0 {
 		compare = true
-	} else if printConfig.IndexMinTime > 0.0 {
-		compare = true
+		// } else if printConfig.DataMinTime > 0.0 {
+		// 	compare = true
 	} else if len(printConfig.Status) > 0 {
 		compare = true
 		for _, status := range printConfig.Status {
@@ -102,42 +153,71 @@ func printRun(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	var logEntry map[string]interface{}
+	var (
+		in    io.ReadCloser
+		err   error
+		from  int64
+		until int64
+	)
+	if printConfig.File == "" {
+		in = os.Stdin
+	} else {
+		if in, err = os.Open(printConfig.File); err != nil {
+			return err
+		}
+		defer in.Close()
+	}
+
+	if !printConfig.From.IsZero() {
+		from = printConfig.From.UnixNano()
+	}
+	if !printConfig.Until.IsZero() {
+		until = printConfig.Until.UnixNano()
+	}
+
 	queries := make(map[string]*stat.Stat)
 
-	printHeader()
-	printFooter()
+	printHeader(printConfig.Verbose)
 
-	scanner := bufio.NewScanner(os.Stdin)
+	scanner := bufio.NewScanner(in)
 	for scanner.Scan() {
-		err := json.Unmarshal(scanner.Bytes(), &logEntry)
+		var logEntry map[string]interface{}
+		line := scanner.Bytes()
+		err := json.Unmarshal(line, &logEntry)
 		if err == nil {
 			id := stat.LogEntryProcess(logEntry, queries)
-			if len(id) > 0 {
+			if id != "" {
 				stat := queries[id]
 
-				print := !compare
-				if compare {
-					if printConfig.MinRows > 0 && printConfig.MinRows <= stat.IndexReadRows+stat.DataReadRows {
-						print = true
-					} else if printConfig.MinTime > 0.0 && printConfig.MinTime <= stat.RequestTime {
-						print = true
-					} else if printConfig.IndexMinRows > 0 && printConfig.IndexMinRows <= stat.IndexReadRows {
-						print = true
-					} else if printConfig.IndexMinTime > 0.0 && printConfig.IndexMinTime <= stat.IndexTime {
-						print = true
+				print := true
+				if from > 0 && stat.TimeStamp < from {
+					print = false
+				}
+				if print && until > 0 && stat.TimeStamp >= until {
+					print = false
+				}
+
+				if print && compare {
+					if printConfig.MinRows > 0 && stat.ReadRows <= printConfig.MinRows {
+						print = false
+					} else if printConfig.MinTime > 0.0 && stat.RequestTime <= printConfig.MinTime {
+						print = false
+					} else if printConfig.IndexMinRows > 0 && stat.IndexReadRows < printConfig.IndexMinRows {
+						print = false
+					} else if printConfig.DataMinRows > 0 && stat.DataReadRows < printConfig.DataMinRows {
+						print = false
 					} else if len(validStatus) > 0 {
 						if _, ok := validStatus[stat.RequestStatus]; ok {
-							print = true
+							print = false
 						}
-					} else if len(skipStatus) > 0 && stat.RequestStatus != 0 {
+					} else if len(skipStatus) > 0 {
 						if _, ok := skipStatus[stat.RequestStatus]; !ok {
-							print = true
+							print = false
 						}
 					}
 				}
 				if print {
-					printStat(id, stat)
+					printStat(id, stat, printConfig.Verbose)
 				}
 
 				delete(queries, id)
@@ -145,28 +225,28 @@ func printRun(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	for id, s := range queries {
-		printStat(id, s)
-	}
+	return nil
 }
 
-func printFlags(rootCmd *cobra.Command) {
-	cmd := &cobra.Command{
-		Use:   "print",
-		Short: "Read from stdin and print queries stat",
-		Run:   printRun,
-	}
+var dateTimeLayout = "2006-01-02T15:04:05"
 
-	cmd.Flags().SortFlags = false
+func registerPrintCmd(registry *clipper.Registry) {
+	printCommand, _ := registry.RegisterWithCallback("print", "read and print queries stat", printRun)
 
-	cmd.Flags().Int64VarP(&printConfig.MinRows, "read_rows", "r", 0, "minimum clickhouse read rows (index + data)")
-	cmd.Flags().Float64VarP(&printConfig.MinTime, "time", "t", 0.0, "minimum query time")
+	printCommand.AddFloat64("time", "t", 0.0, &printConfig.MinTime, "minimum query time")
+	printCommand.AddInt64N("read_rows", "r", 0, &printConfig.MinRows, "minimum clickhouse read rows (index + data)")
 
-	cmd.Flags().Int64VarP(&printConfig.IndexMinRows, "index_read_rows", "i", 0, "minimum clickhouse read rows (index)")
-	cmd.Flags().Float64VarP(&printConfig.IndexMinTime, "index_time", "I", 0.0, "minimum query time (index)")
+	printCommand.AddInt64N("i_read_rows", "I", 0, &printConfig.IndexMinRows, "minimum clickhouse read rows (index)")
+	printCommand.AddInt64N("d_read_rows", "D", 0, &printConfig.DataMinRows, "minimum clickhouse read rows (data)")
+	// cmd.Flags().Float64VarP(&printConfig.IndexMinTime, "index_time", "I", 0.0, "minimum query time (index)")
 
-	cmd.Flags().VarP(&printConfig.Status, "status", "s", "responce status")
-	cmd.Flags().VarP(&printConfig.StatusSkip, "status-skip", "S", "skip responce status")
+	printCommand.AddInt64Array("status", "s", []int64{}, &printConfig.Status, "responce status")
+	printCommand.AddInt64Array("status-skip", "S", []int64{}, &printConfig.StatusSkip, "skip responce status")
 
-	rootCmd.AddCommand(cmd)
+	printCommand.AddFlag("verbose", "v", &printConfig.Verbose, "verbose")
+
+	printCommand.AddString("input", "i", "", &printConfig.File, "input log file or stdin")
+
+	printCommand.AddTime("from", "f", time.Time{}, &printConfig.From, dateTimeLayout, "start time (UTC)")
+	printCommand.AddTime("until", "u", time.Time{}, &printConfig.Until, dateTimeLayout, "end time (UTC)")
 }
