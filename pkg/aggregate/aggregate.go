@@ -325,16 +325,16 @@ func (sSum StatIndexSummary) Aggregate() map[LabelKey][]*StatIndexAggNode {
 		aggStat.N = statNode.N
 		aggStat.ErrorsPcnt = float64(statNode.Errors) / float64(statNode.N) * 100
 
-		aggStat.Metrics.Calc(statNode.Metrics)
+		_ = aggStat.Metrics.Calc(statNode.Metrics)
 
 		IndexCache := statNode.IndexCacheMiss + statNode.IndexCacheHit
 		if IndexCache > 0 {
 			aggStat.IndexCacheHitPcnt = float64(statNode.IndexCacheHit) / float64(IndexCache) * 100
 		}
 
-		aggStat.ReadRows.Calc(statNode.ReadRows)
-		aggStat.ReadBytes.Calc(statNode.ReadBytes)
-		aggStat.Times.Calc(statNode.Times)
+		_ = aggStat.ReadRows.Calc(statNode.ReadRows)
+		_ = aggStat.ReadBytes.Calc(statNode.ReadBytes)
+		_ = aggStat.Times.Calc(statNode.Times)
 
 		// aggStat.IndexN.Calc(statNode.IndexN)
 
@@ -599,18 +599,18 @@ func (sSum StatRequestSummary) Aggregate() map[LabelKey][]*StatRequestAggNode {
 		aggStat.SampleId = statNode.SampleId
 		aggStat.ErrorId = statNode.ErrorId
 
-		aggStat.Metrics.Calc(statNode.Metrics)
-		aggStat.Points.Calc(statNode.Points)
-		aggStat.Bytes.Calc(statNode.Bytes)
+		_ = aggStat.Metrics.Calc(statNode.Metrics)
+		_ = aggStat.Points.Calc(statNode.Points)
+		_ = aggStat.Bytes.Calc(statNode.Bytes)
 
-		aggStat.ReadRows.Calc(statNode.ReadRows)
-		aggStat.ReadBytes.Calc(statNode.ReadBytes)
-		aggStat.RequestTimes.Calc(statNode.RequestTimes)
-		aggStat.QueryTimes.Calc(statNode.QueryTimes)
+		_ = aggStat.ReadRows.Calc(statNode.ReadRows)
+		_ = aggStat.ReadBytes.Calc(statNode.ReadBytes)
+		_ = aggStat.RequestTimes.Calc(statNode.RequestTimes)
+		_ = aggStat.QueryTimes.Calc(statNode.QueryTimes)
 
-		aggStat.DataReadRows.Calc(statNode.DataReadRows)
-		aggStat.DataReadBytes.Calc(statNode.DataReadBytes)
-		aggStat.DataTimes.Calc(statNode.DataTimes)
+		_ = aggStat.DataReadRows.Calc(statNode.DataReadRows)
+		_ = aggStat.DataReadBytes.Calc(statNode.DataReadBytes)
+		_ = aggStat.DataTimes.Calc(statNode.DataTimes)
 
 		aggStats[label] = append(aggStats[label], aggStat)
 	}
@@ -632,17 +632,17 @@ func BuildStatKey(s *stat.Stat) (indexKey, queryKey *StatKey, statIndex, statQue
 	statIndex = make([]StatQuery, 0, len(s.Queries))
 
 	sbIndex.Grow(128)
-	sbIndex.WriteByte('[')
+	_ = sbIndex.WriteByte('[')
 	indexKey = &StatKey{RequestType: s.RequestType}
 
 	queryKey = &StatKey{RequestType: s.RequestType}
 	sbQuery.Grow(128)
-	sbQuery.WriteByte('[')
+	_ = sbQuery.WriteByte('[')
 
 	for _, q := range s.Queries {
-		sbIndex.WriteString("{query='")
-		sbIndex.WriteString(q.Query)
-		sbIndex.WriteByte('\'')
+		_, _ = sbIndex.WriteString("{query='")
+		_, _ = sbIndex.WriteString(q.Query)
+		_ = sbIndex.WriteByte('\'')
 
 		var (
 			daysStr                string
@@ -654,13 +654,13 @@ func BuildStatKey(s *stat.Stat) (indexKey, queryKey *StatKey, statIndex, statQue
 				maxDays = q.Days
 				maxDaysStr = daysStr
 			}
-			sbIndex.WriteString(",index=")
-			sbIndex.WriteString(daysStr)
+			_, _ = sbIndex.WriteString(",index=")
+			_, _ = sbIndex.WriteString(daysStr)
 		}
 
-		sbQuery.WriteString("{query='")
-		sbQuery.WriteString(q.Query)
-		sbQuery.WriteByte('\'')
+		_, _ = sbQuery.WriteString("{query='")
+		_, _ = sbQuery.WriteString(q.Query)
+		_ = sbQuery.WriteByte('\'')
 
 		if q.From != 0 && q.Until != 0 {
 			duration := q.Until - q.From
@@ -673,8 +673,8 @@ func BuildStatKey(s *stat.Stat) (indexKey, queryKey *StatKey, statIndex, statQue
 					maxDuration = duration
 					maxDurationStr = durationStr
 				}
-				sbQuery.WriteString(",render=")
-				sbQuery.WriteString(durationStr)
+				_, _ = sbQuery.WriteString(",render=")
+				_, _ = sbQuery.WriteString(durationStr)
 			}
 			offset := s.TimeStamp/1e9 - q.Until
 			if offset > 0 {
@@ -683,14 +683,14 @@ func BuildStatKey(s *stat.Stat) (indexKey, queryKey *StatKey, statIndex, statQue
 						minOffset = offset
 						minOffsetStr = offsetStr
 					}
-					sbQuery.WriteString(",offset=")
-					sbQuery.WriteString(offsetStr)
+					_, _ = sbQuery.WriteString(",offset=")
+					_, _ = sbQuery.WriteString(offsetStr)
 				}
 			}
 		}
 
-		sbIndex.WriteByte('}')
-		sbQuery.WriteByte('}')
+		_ = sbIndex.WriteByte('}')
+		_ = sbQuery.WriteByte('}')
 
 		statIndex = append(statIndex, StatQuery{
 			Query:         q.Query,
@@ -702,11 +702,11 @@ func BuildStatKey(s *stat.Stat) (indexKey, queryKey *StatKey, statIndex, statQue
 			Offset:        offsetStr,
 		})
 	}
-	sbIndex.WriteByte(']')
+	_ = sbIndex.WriteByte(']')
 	indexKey.Queries = sbIndex.String()
 	indexKey.DurationLabel = maxDaysStr
 
-	sbQuery.WriteByte(']')
+	_ = sbQuery.WriteByte(']')
 	queryKey.Queries = sbQuery.String()
 	queryKey.DurationLabel = maxDurationStr
 	if !(minOffset == math.MaxInt64 && minOffsetStr == "") {
