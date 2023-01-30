@@ -34,6 +34,17 @@ type StatIndexAggNode struct {
 	// IndexN    AggNode
 }
 
+func (agg *StatIndexAggNode) Diff(b *StatIndexAggNode) *StatIndexDiffNode {
+	diff := &StatIndexDiffNode{
+		StatIndexAggNode: *agg,
+	}
+	diff.DiffNPcnt = (agg.N - b.N) / agg.N * 100
+	diff.DiffErrorsPcnt = agg.ErrorsPcnt - b.ErrorsPcnt
+	diff.DiffIndexCacheHitPcnt = agg.IndexCacheHitPcnt - b.IndexCacheHitPcnt
+
+	return diff
+}
+
 func GreaterIndexAggP99ByTime(a, b *StatIndexAggNode) bool {
 	if a.Times.P99 == b.Times.P99 {
 		return a.ReadRows.Max > b.ReadRows.Max
@@ -655,7 +666,7 @@ func BuildStatKey(s *stat.Stat) (indexKey, queryKey *StatKey, statIndex, statQue
 				maxDaysStr = daysStr
 			}
 			_, _ = sbIndex.WriteString(",index=")
-			_, _ = sbIndex.WriteString(daysStr)
+			sbIndex.WriteString(daysStr)
 		}
 
 		_, _ = sbQuery.WriteString("{query='")

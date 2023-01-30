@@ -93,19 +93,13 @@ func printEndline() {
 // }
 
 func printAggNode(name string, aggNode *aggregate.AggNode, prec int) {
-	fmt.Printf("%16s | %15s | %15s | %15s | %15s | %15s\n", name,
-		utils.FormatFloat64(aggNode.P50, prec), utils.FormatFloat64(aggNode.P90, prec),
-		utils.FormatFloat64(aggNode.P95, prec), utils.FormatFloat64(aggNode.P99, prec),
-		utils.FormatFloat64(aggNode.Max, prec),
-	)
-}
-
-func printAggNodeZ(name string, aggNode *aggregate.AggNode, prec int) {
-	fmt.Printf("%16s | %15s | %15s | %15s | %15s | %15s\n", name,
-		utils.FormatFloat64Z(aggNode.P50, prec), utils.FormatFloat64Z(aggNode.P90, prec),
-		utils.FormatFloat64Z(aggNode.P95, prec), utils.FormatFloat64Z(aggNode.P99, prec),
-		utils.FormatFloat64Z(aggNode.Max, prec),
-	)
+	if aggNode.Init {
+		fmt.Printf("%16s | %15s | %15s | %15s | %15s | %15s\n", name,
+			utils.FormatFloat64Z(aggNode.P50, prec), utils.FormatFloat64Z(aggNode.P90, prec),
+			utils.FormatFloat64Z(aggNode.P95, prec), utils.FormatFloat64Z(aggNode.P99, prec),
+			utils.FormatFloat64Z(aggNode.Max, prec),
+		)
+	}
 }
 
 func printIndexes(idxs []*aggregate.StatIndexAggNode, n int, indexSort aggregate.IndexSort, key aggregate.AggSortKey) {
@@ -146,16 +140,8 @@ func printRequests(qs []*aggregate.StatRequestAggNode, n int, sort aggregate.Req
 		printSmallFooter()
 		printAggNode("qtimes", &s.QueryTimes, 2)
 		printAggNode("rtimes", &s.RequestTimes, 2)
-		if s.IndexErrorsPcnt < 100.0 {
-			printAggNodeZ("metrics", &s.Metrics, 2)
-		} else {
-			printAggNode("metrics", &s.Metrics, 2)
-		}
-		if s.DataErrorsPcnt < 100.0 {
-			printAggNodeZ("points", &s.Points, 2)
-		} else {
-			printAggNode("points", &s.Points, 2)
-		}
+		printAggNode("metrics", &s.Metrics, 2)
+		printAggNode("points", &s.Points, 2)
 		printAggNode("read_rows", &s.ReadRows, 2)
 		printAggNode("read_bytes", &s.ReadBytes, 2)
 		printAggNode("index_read_rows", &s.IndexReadRows, 2)

@@ -7,16 +7,18 @@ import (
 )
 
 type AggNode struct {
-	Min float64
-	Max float64
-	P50 float64
-	P90 float64
-	P95 float64
-	P99 float64
+	Init bool
+	Min  float64
+	Max  float64
+	P50  float64
+	P90  float64
+	P95  float64
+	P99  float64
 }
 
-func (a *AggNode) Calc(values []float64) error {
+func (agg *AggNode) Calc(values []float64) error {
 	if len(values) == 0 {
+		agg.Init = false
 		return utils.ErrEmptyInput
 	}
 
@@ -26,22 +28,38 @@ func (a *AggNode) Calc(values []float64) error {
 
 	var err error
 
-	a.Min = input[0]
-	a.Max = input[len(input)-1]
+	agg.Min = input[0]
+	agg.Max = input[len(input)-1]
 	// a.Sum = utils.Sum(input)
 
-	if a.P50, err = utils.Percentile(input, 0.5); err != nil {
+	if agg.P50, err = utils.Percentile(input, 0.5); err != nil {
+		agg.Init = false
 		return err
 	}
-	if a.P90, err = utils.Percentile(input, 0.9); err != nil {
+	if agg.P90, err = utils.Percentile(input, 0.9); err != nil {
+		agg.Init = false
 		return err
 	}
-	if a.P95, err = utils.Percentile(input, 0.95); err != nil {
+	if agg.P95, err = utils.Percentile(input, 0.95); err != nil {
+		agg.Init = false
 		return err
 	}
-	if a.P99, err = utils.Percentile(input, 0.99); err != nil {
+	if agg.P99, err = utils.Percentile(input, 0.99); err != nil {
+		agg.Init = false
 		return err
 	}
 
+	agg.Init = true
+
 	return nil
+}
+
+func (agg *AggNode) Diff(a, b *AggNode) {
+	if a.Init && b.Init {
+
+	} else {
+		agg.Init = false
+		agg.Min = 0
+		agg.Max = 0
+	}
 }
