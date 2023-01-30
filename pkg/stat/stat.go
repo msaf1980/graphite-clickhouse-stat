@@ -77,25 +77,25 @@ func readString(logEntry map[string]interface{}, key string) (string, error) {
 	}
 }
 
-func readStringSlice(logEntry map[string]interface{}, key string) ([]string, error) {
-	if item, ok := logEntry[key]; ok {
-		if items, ok := item.([]interface{}); ok {
-			if len(items) == 0 {
-				return []string{}, nil
-			}
-			if _, ok := items[0].(string); ok {
-				s := make([]string, 0, len(items))
-				for _, i := range items {
-					s = append(s, i.(string))
-				}
-				return s, nil
-			}
-		}
-		return []string{}, errors.New("key " + key + "not a []string")
-	} else {
-		return []string{}, errors.New("key " + key + "not found")
-	}
-}
+// func readStringSlice(logEntry map[string]interface{}, key string) ([]string, error) {
+// 	if item, ok := logEntry[key]; ok {
+// 		if items, ok := item.([]interface{}); ok {
+// 			if len(items) == 0 {
+// 				return []string{}, nil
+// 			}
+// 			if _, ok := items[0].(string); ok {
+// 				s := make([]string, 0, len(items))
+// 				for _, i := range items {
+// 					s = append(s, i.(string))
+// 				}
+// 				return s, nil
+// 			}
+// 		}
+// 		return []string{}, errors.New("key " + key + "not a []string")
+// 	} else {
+// 		return []string{}, errors.New("key " + key + "not found")
+// 	}
+// }
 
 func readInt64(logEntry map[string]interface{}, key string) (int64, error) {
 	if item, ok := logEntry[key]; ok {
@@ -442,12 +442,12 @@ func LessStat(a, b *Stat, sortKey Sort) bool {
 	}
 }
 
-func abs(a int64) int64 {
-	if a < 0 {
-		return -a
-	}
-	return a
-}
+// func abs(a int64) int64 {
+// 	if a < 0 {
+// 		return -a
+// 	}
+// 	return a
+// }
 
 func tagQuery(params []string) string {
 	var sb strings.Builder
