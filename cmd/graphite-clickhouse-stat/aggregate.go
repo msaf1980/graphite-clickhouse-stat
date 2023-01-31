@@ -284,7 +284,9 @@ func aggRun() error {
 		printReport("Index queries", aggConfig.IndexSort.String(), aggConfig.Key.String(), aggConfig.Top)
 
 		printLabelHeader()
-		for label, idxs := range aggStatSum.Index {
+		labels := aggStatSum.IndexLabels()
+		for _, label := range labels {
+			idxs := aggStatSum.Index[label]
 			printLabelFooter()
 			printLabel(label)
 			printLabelFooter()
@@ -303,7 +305,9 @@ func aggRun() error {
 		printReport("Queries", aggConfig.Sort.String(), aggConfig.Key.String(), aggConfig.Top)
 
 		printLabelHeader()
-		for label, qs := range aggStatSum.Requests {
+		labels = aggStatSum.RequestLabels()
+		for _, label := range labels {
+			qs := aggStatSum.Requests[label]
 			printLabelFooter()
 			printLabel(label)
 			printLabelFooter()

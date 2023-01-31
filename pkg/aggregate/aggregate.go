@@ -727,6 +727,37 @@ type StatAggSum struct {
 	Requests map[LabelKey][]*StatRequestAggNode
 }
 
+func LabelsSort(keys []LabelKey) {
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].RequestType == keys[j].RequestType {
+			if keys[i].DurationLabel == keys[j].DurationLabel {
+				return keys[i].OffsetLabel < keys[j].OffsetLabel
+			}
+			return keys[i].DurationLabel < keys[j].DurationLabel
+		}
+		return keys[i].RequestType < keys[j].RequestType
+	})
+}
+
+func (aggSum *StatAggSum) IndexLabels() []LabelKey {
+	keys := make([]LabelKey, len(aggSum.Index))
+	for k := range aggSum.Index {
+		keys = append(keys, k)
+	}
+	LabelsSort(keys)
+
+	return keys
+}
+
+func (aggSum *StatAggSum) RequestLabels() []LabelKey {
+	keys := make([]LabelKey, len(aggSum.Requests))
+	for k := range aggSum.Requests {
+		keys = append(keys, k)
+	}
+	LabelsSort(keys)
+
+	return keys
+}
 func (aSum *StatAggSum) Slice() StatAggSumSlice {
 	agg := StatAggSumSlice{
 		Index:    make([]*StatIndexAggNode, 0, len(aSum.Index)*2),
