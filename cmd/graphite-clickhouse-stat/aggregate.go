@@ -209,12 +209,13 @@ func loadAggStat(n int, sort aggregate.RequestSort, key aggregate.AggSortKey, in
 	}
 
 	queries := make(map[string]*stat.Stat)
+	var logEntry map[string]interface{}
 
 	statSum := aggregate.NewStatSummary()
 
 	scanner := bufio.NewScanner(in)
 	for scanner.Scan() {
-		var logEntry map[string]interface{}
+		stat.ResetLogEntry(logEntry)
 		line := scanner.Bytes()
 		err := json.Unmarshal(line, &logEntry)
 		if err == nil {
