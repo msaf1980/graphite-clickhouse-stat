@@ -29,6 +29,8 @@ type PrintConfig struct {
 	From  time.Time
 	Until time.Time
 
+	Users []string
+
 	File string
 }
 
@@ -179,6 +181,7 @@ func printRun() error {
 	if !printConfig.Until.IsZero() {
 		until = printConfig.Until.UnixNano()
 	}
+	usersSet := newStringsSet(printConfig.Users)
 
 	queries := make(map[string]*stat.Stat)
 	var logEntry map[string]interface{}
@@ -223,7 +226,13 @@ func printRun() error {
 					}
 				}
 				if print {
-					printStat(id, stat, len(printConfig.Verbose))
+					if len(printConfig.Users) > 0 {
+						if usersSet.Exist(stat.Username) {
+							printStat(id, stat, len(printConfig.Verbose))
+						}
+					} else {
+						printStat(id, stat, len(printConfig.Verbose))
+					}
 				}
 
 				delete(queries, id)
@@ -255,4 +264,6 @@ func registerPrintCmd(registry *clipper.Registry) {
 
 	printCommand.AddTime("from", "f", time.Time{}, &printConfig.From, dateTimeLayout, "start time (UTC)")
 	printCommand.AddTime("until", "u", time.Time{}, &printConfig.Until, dateTimeLayout, "end time (UTC)")
+
+	printCommand.AddStringArray("users", "U", nil, &printConfig.Users, "print only queries from selected users")
 }
