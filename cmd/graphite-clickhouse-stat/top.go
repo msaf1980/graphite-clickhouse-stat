@@ -18,7 +18,8 @@ type TopConfig struct {
 	Top       int
 	Duration  time.Duration
 	QuerySort stat.Sort
-	Verbose   bool
+	// TODO: increment flag
+	Verbose []bool
 
 	File string
 
@@ -31,7 +32,7 @@ var topConfig TopConfig
 func printTop(queries map[string]*stat.Stat, n int, sortKey stat.Sort, from, until int64, cleanup bool) {
 	stats := top.GetTop(queries, n, sortKey, from, until, cleanup)
 	for _, s := range stats {
-		printStat(s.Id, s, topConfig.Verbose)
+		printStat(s.Id, s, len(topConfig.Verbose))
 	}
 }
 
@@ -61,6 +62,7 @@ func topRun() error {
 	}
 
 	queries := make(map[string]*stat.Stat)
+	var logEntry map[string]interface{}
 
 	if !topConfig.From.IsZero() {
 		from = topConfig.From.UnixNano()
@@ -71,7 +73,7 @@ func topRun() error {
 
 	scanner := bufio.NewScanner(in)
 	for scanner.Scan() {
-		var logEntry map[string]interface{}
+		stat.ResetLogEntry(logEntry)
 		line := scanner.Bytes()
 		err := json.Unmarshal(line, &logEntry)
 		if err == nil {
@@ -92,7 +94,7 @@ func topRun() error {
 					timeStamp = t
 				} else if timeStamp != t {
 					// next time round, flush  queries
-					printHeader(topConfig.Verbose)
+					printHeader(len(topConfig.Verbose))
 					printTop(queries, topConfig.Top, topConfig.QuerySort, from, until, true)
 					timeStamp = t
 				}
@@ -100,7 +102,10 @@ func topRun() error {
 		}
 	}
 
-	printTop(queries, topConfig.Top, topConfig.QuerySort, from, until, true)
+	if len(queries) > 0 {
+		printHeader(len(topConfig.Verbose))
+		printTop(queries, topConfig.Top, topConfig.QuerySort, from, until, true)
+	}
 
 	return nil
 }
@@ -108,7 +113,7 @@ func topRun() error {
 func registerTopCmd(registry *clipper.Registry) {
 	topCommand, _ := registry.RegisterWithCallback("top", "read from stdin and print top queries stat", topRun)
 
-	topCommand.AddFlag("verbose", "v", &topConfig.Verbose, "verbose")
+	topCommand.AddMultiFlag("verbose", "v", &topConfig.Verbose, "verbose")
 	topCommand.AddDuration("duration", "d", 10*time.Second, &topConfig.Duration, "flush duration")
 
 	topCommand.AddInt("top", "n", 10, &topConfig.Top, "top queries")

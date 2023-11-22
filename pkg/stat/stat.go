@@ -25,6 +25,12 @@ func (s *Status) String() string {
 	return statusStrings[*s]
 }
 
+func ResetLogEntry(logEntry map[string]interface{}) {
+	for k := range logEntry {
+		delete(logEntry, k)
+	}
+}
+
 func stripError(err string) string {
 	if strings.Contains(err, " lookup ") {
 		return "address lookup error"
@@ -149,6 +155,26 @@ func readBool(logEntry map[string]interface{}, key string) (bool, error) {
 	}
 }
 
+func readUsername(logEntry map[string]interface{}, key, userKey string) (string, error) {
+	if item, ok := logEntry[key]; ok {
+		if v, ok := item.(map[string]interface{}); ok {
+			if userItem, ok := v[userKey]; ok {
+				if user, ok := userItem.(string); ok {
+					return user, nil
+				} else {
+					return "", errors.New("user key " + key + "not a string")
+				}
+			} else {
+				return "", nil
+			}
+		} else {
+			return "", errors.New("key " + key + "not a map")
+		}
+	} else {
+		return "", errors.New("key " + key + "not found")
+	}
+}
+
 type Query struct {
 	Days  int
 	Query string
@@ -210,6 +236,30 @@ type Stat struct {
 	DataReadRows  int64
 	DataReadBytes int64
 	Data          []DataStat
+
+	Username string
+}
+
+func (s *Stat) MaxDuration() int64 {
+	var (
+		maxDays     int
+		maxDuration int64
+	)
+	for _, q := range s.Queries {
+		if maxDays < q.Days {
+			maxDays = q.Days
+		}
+		if q.From != 0 && q.Until != 0 {
+			duration := q.Until - q.From
+			if maxDuration < duration {
+				maxDuration = duration
+			}
+		}
+	}
+	if maxDuration > 0 {
+		return maxDuration
+	}
+	return int64(maxDays) * 86400
 }
 
 func (s *Stat) Reset(ts int64) {
@@ -524,6 +574,8 @@ func LogEntryProcess(logEntry map[string]interface{}, queries map[string]*Stat) 
 		v = &Stat{Id: request_id, TimeStamp: ts}
 		queries[request_id] = v
 	}
+
+	v.Username, _ = readUsername(logEntry, "request_headers", "X-Forwarded-User")
 
 	level := logEntry["level"].(string)
 

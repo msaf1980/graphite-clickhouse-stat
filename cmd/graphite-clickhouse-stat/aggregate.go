@@ -209,12 +209,13 @@ func loadAggStat(n int, sort aggregate.RequestSort, key aggregate.AggSortKey, in
 	}
 
 	queries := make(map[string]*stat.Stat)
+	var logEntry map[string]interface{}
 
 	statSum := aggregate.NewStatSummary()
 
 	scanner := bufio.NewScanner(in)
 	for scanner.Scan() {
-		var logEntry map[string]interface{}
+		stat.ResetLogEntry(logEntry)
 		line := scanner.Bytes()
 		err := json.Unmarshal(line, &logEntry)
 		if err == nil {
@@ -284,7 +285,9 @@ func aggRun() error {
 		printReport("Index queries", aggConfig.IndexSort.String(), aggConfig.Key.String(), aggConfig.Top)
 
 		printLabelHeader()
-		for label, idxs := range aggStatSum.Index {
+		labels := aggStatSum.IndexLabels()
+		for _, label := range labels {
+			idxs := aggStatSum.Index[label]
 			printLabelFooter()
 			printLabel(label)
 			printLabelFooter()
@@ -303,7 +306,9 @@ func aggRun() error {
 		printReport("Queries", aggConfig.Sort.String(), aggConfig.Key.String(), aggConfig.Top)
 
 		printLabelHeader()
-		for label, qs := range aggStatSum.Requests {
+		labels = aggStatSum.RequestLabels()
+		for _, label := range labels {
+			qs := aggStatSum.Requests[label]
 			printLabelFooter()
 			printLabel(label)
 			printLabelFooter()

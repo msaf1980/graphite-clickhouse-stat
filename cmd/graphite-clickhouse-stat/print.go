@@ -23,7 +23,8 @@ type PrintConfig struct {
 	// IndexMinTime float64
 	Status     []int64
 	StatusSkip []int64
-	Verbose    bool
+	// TODO: increment flag
+	Verbose []bool
 
 	From  time.Time
 	Until time.Time
@@ -34,7 +35,7 @@ type PrintConfig struct {
 var printConfig PrintConfig
 
 var (
-	footerPrint      = headLine(204, '-')
+	footerPrint      = headLine(214, '-')
 	labelFooterPrint = headLine(204, '=')
 )
 
@@ -46,20 +47,21 @@ func printLabelFooter() {
 	fmt.Println(labelFooterPrint)
 }
 
-func printHeader(verbose bool) {
+func printHeader(verbose int) {
 	printFooter()
-	fmt.Printf("%19s | %3s | %10s | %10s | %10s |%s| %10s | %10s | %16s | %32s | %7s | %8s | %8s | %10s | %s\n",
+	fmt.Printf("%19s | %3s | %10s | %10s | %10s |%s| %10s | %10s | %16s | %32s | %7s | %8s | %8s | %10s | %10s | %6s | %s\n",
 		"timestamp (UTC)", "S", "rtime", "wtime", "qtime", "W",
 		"read_rows", "read_bytes",
 		"type", "request_id", "metrics", "points", "size",
-		"iread_rows", "dread_rows",
+		"iread_rows", "dread_rows", "mdur", "username",
 	)
-	if verbose {
+	if verbose > 0 {
 		printFooter()
 		fmt.Printf("%19s | %3s | %10s | %10s | %s\n",
 			"index days", "", "duration", "offset", "query",
 		)
-
+	}
+	if verbose > 1 {
 		printFooter()
 		// index/data stat
 		fmt.Printf("%19s | %3s | %10s | %10s | %10s |%s| %10s | %10s | %51s | %-29s | %s\n",
@@ -77,10 +79,10 @@ func headLine(n int, c byte) string {
 	return string(out)
 }
 
-func printStat(id string, s *stat.Stat, verbose bool) {
+func printStat(id string, s *stat.Stat, verbose int) {
 
 	fmt.Printf("%19s | %3d | %10.2f | %10.2f | %10.2f |%s| %10s | %10s | %16s | %32s"+ // last - id
-		" | %7s | %8s | %8s | %10s | %s\n", // metrics, points, bytes, read_rows, read_bytes
+		" | %7s | %8s | %8s | %10s | %10s | %6s | %s\n", // metrics, points, bytes, read_rows, read_bytes
 		time.Unix(s.TimeStamp/1e9, 0).UTC().Format("2006-01-02 15:04:05"),
 		s.RequestStatus,
 		s.RequestTime, s.WaitTime, s.QueryTime, s.WaitStatus.String(),
@@ -88,8 +90,9 @@ func printStat(id string, s *stat.Stat, verbose bool) {
 		s.RequestType, id,
 		utils.FormatNumber(s.Metrics), utils.FormatNumber(s.Points), utils.FormatBytes(s.Bytes),
 		utils.FormatNumber(s.IndexReadRows), utils.FormatNumber(s.DataReadRows),
+		utils.FormatDuration(s.MaxDuration(), false), s.Username,
 	)
-	if verbose {
+	if verbose > 0 {
 		for _, q := range s.Queries {
 			var d, offset string
 			if q.From > 0 && q.Until > 0 {
@@ -100,7 +103,8 @@ func printStat(id string, s *stat.Stat, verbose bool) {
 				utils.FormatInt(q.Days), "", d, offset, q.Query,
 			)
 		}
-
+	}
+	if verbose > 1 {
 		// index stat
 		for _, q := range s.Index {
 			fmt.Printf("%19s | %3s | %10s | %10s | %10.2f |%s| %10s | %10s | %51s | %-29s | %s\n",
@@ -123,6 +127,7 @@ func printStat(id string, s *stat.Stat, verbose bool) {
 			)
 		}
 	}
+
 }
 
 func printRun() error {
@@ -176,12 +181,13 @@ func printRun() error {
 	}
 
 	queries := make(map[string]*stat.Stat)
+	var logEntry map[string]interface{}
 
-	printHeader(printConfig.Verbose)
+	printHeader(len(printConfig.Verbose))
 
 	scanner := bufio.NewScanner(in)
 	for scanner.Scan() {
-		var logEntry map[string]interface{}
+		stat.ResetLogEntry(logEntry)
 		line := scanner.Bytes()
 		err := json.Unmarshal(line, &logEntry)
 		if err == nil {
@@ -217,7 +223,7 @@ func printRun() error {
 					}
 				}
 				if print {
-					printStat(id, stat, printConfig.Verbose)
+					printStat(id, stat, len(printConfig.Verbose))
 				}
 
 				delete(queries, id)
@@ -243,7 +249,7 @@ func registerPrintCmd(registry *clipper.Registry) {
 	printCommand.AddInt64Array("status", "s", []int64{}, &printConfig.Status, "responce status")
 	printCommand.AddInt64Array("status-skip", "S", []int64{}, &printConfig.StatusSkip, "skip responce status")
 
-	printCommand.AddFlag("verbose", "v", &printConfig.Verbose, "verbose")
+	printCommand.AddMultiFlag("verbose", "v", &printConfig.Verbose, "verbose")
 
 	printCommand.AddString("input", "i", "", &printConfig.File, "input log file or stdin")
 

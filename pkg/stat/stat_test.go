@@ -10,24 +10,25 @@ import (
 
 func Test_LogEntryProcess(t *testing.T) {
 	tests := []struct {
-		name    string
-		entries []string
-		queries map[string]*Stat
+		name        string
+		entries     []string
+		wantQueries map[string]*Stat
 	}{
 		{
 			name: "render test.a",
 			entries: []string{
-				`{"level":"INFO","timestamp":"2023-01-21T13:05:43.290+0500","logger":"render.pb3parser","message":"pb3_target","request_id":"1f72e822bed05bebd97a9bdcc4654f1a","from":1674288223,"until":1674288343,"maxDataPoints":0,"target":"test.a"}`,
-				`{"level":"INFO","timestamp":"2023-01-21T13:05:43.510+0500","logger":"render","message":"query","request_id":"1f72e822bed05bebd97a9bdcc4654f1a","query":"SELECT Path FROM graphite_indexd WHERE ((Level=8) AND (Path IN ('test.a'))) AND (Date >='2023-01-21' AND Date <= '2023-01-21') GROUP BY Path FORMAT TabSeparatedRaw","read_rows":"241436","read_bytes":"31416887","written_rows":"0","written_bytes":"0","total_rows_to_read":"241436","query_id":"1f72e822bed05bebd97a9bdcc4654f1a::1390f060ca3d959d","time":0.219432977}`,
-				`{"level":"INFO","timestamp":"2023-01-21T13:05:43.510+0500","logger":"render","message":"finder","request_id":"1f72e822bed05bebd97a9bdcc4654f1a","set_cache":"2023-01-21;2023-01-21;test.a;ttl=60","timestamp_cached":"2023-01-21T13:05:00.000+0500","metrics":1,"find_cached":false,"ttl":"60","from":1674288223,"until":1674288343,"target":"test.a"}`,
-				`{"level":"INFO","timestamp":"2023-01-21T13:05:43.510+0500","logger":"render","message":"finder","request_id":"1f72e822bed05bebd97a9bdcc4654f1a","metrics":1,"find_cached":false}`,
-				`{"level":"INFO","timestamp":"2023-01-21T13:05:43.772+0500","logger":"render","message":"query","request_id":"1f72e822bed05bebd97a9bdcc4654f1a","query":"WITH anyResample(1674288230, 1674288349, 10)(toUInt32(intDiv(Time, 10)*10), Time) AS mask SELECT Path, arrayFilter(m->m!=0, mask) AS times, arrayFilter((v,m)->m!=0, avgResample(1674288230, 1674288349, 10)(Value, Time), mask) AS values FROM graphite_reversed PREWHERE Date >= '2023-01-21' AND Date <= '2023-01-21' WHERE (Path in metrics_list) AND (Time >= 1674288230 AND Time <= 1674288349) GROUP BY Path FORMAT RowBinary","read_rows":"1228804","read_bytes":"164970948","written_rows":"0","written_bytes":"0","total_rows_to_read":"1228800","query_id":"1f72e822bed05bebd97a9bdcc4654f1a::1b87069be1c53ee2","time":0.261669254}`,
-				`{"level":"INFO","timestamp":"2023-01-21T13:05:43.772+0500","logger":"render","message":"data_parse","request_id":"1f72e822bed05bebd97a9bdcc4654f1a","read_bytes":148,"read_points":4,"runtime":"39.481364ms","runtime_ns":0.039481364}`,
-				`{"level":"DEBUG","timestamp":"2023-01-21T13:05:43.773+0500","logger":"render","message":"reply","request_id":"1f72e822bed05bebd97a9bdcc4654f1a","runtime":"63.018µs","runtime_ns":0.000063018}`,
-				`{"level":"INFO","timestamp":"2023-01-21T13:05:43.773+0500","logger":"http","message":"access","request_id":"1f72e822bed05bebd97a9bdcc4654f1a","time":0.482252576,"wait_slot":0,"wait_fail":false,"method":"GET","url":"/render/?format=carbonapi_v3_pb","peer":"127.0.0.1:40354","client":"","status":200,"find_cached":false}`,
+				`{"level":"INFO","timestamp":"2023-01-21T13:05:43.290+0500","logger":"render.pb3parser","message":"pb3_target","request_id":"1f72e822bed05bebd97a9bdcc4654f1a","from":1674288223,"until":1674288343,"maxDataPoints":0,"target":"test.a","request_headers":{"X-Forwarded-User":"test"}}`,
+				`{"level":"INFO","timestamp":"2023-01-21T13:05:43.510+0500","logger":"render","message":"query","request_id":"1f72e822bed05bebd97a9bdcc4654f1a","query":"SELECT Path FROM graphite_indexd WHERE ((Level=8) AND (Path IN ('test.a'))) AND (Date >='2023-01-21' AND Date <= '2023-01-21') GROUP BY Path FORMAT TabSeparatedRaw","read_rows":"241436","read_bytes":"31416887","written_rows":"0","written_bytes":"0","total_rows_to_read":"241436","query_id":"1f72e822bed05bebd97a9bdcc4654f1a::1390f060ca3d959d","time":0.219432977,"request_headers":{"X-Forwarded-User":"test"}}`,
+				`{"level":"INFO","timestamp":"2023-01-21T13:05:43.510+0500","logger":"render","message":"finder","request_id":"1f72e822bed05bebd97a9bdcc4654f1a","set_cache":"2023-01-21;2023-01-21;test.a;ttl=60","timestamp_cached":"2023-01-21T13:05:00.000+0500","metrics":1,"find_cached":false,"ttl":"60","from":1674288223,"until":1674288343,"target":"test.a","request_headers":{"X-Forwarded-User":"test"}}`,
+				`{"level":"INFO","timestamp":"2023-01-21T13:05:43.510+0500","logger":"render","message":"finder","request_id":"1f72e822bed05bebd97a9bdcc4654f1a","metrics":1,"find_cached":false,"request_headers":{"X-Forwarded-User":"test"}}`,
+				`{"level":"INFO","timestamp":"2023-01-21T13:05:43.772+0500","logger":"render","message":"query","request_id":"1f72e822bed05bebd97a9bdcc4654f1a","query":"WITH anyResample(1674288230, 1674288349, 10)(toUInt32(intDiv(Time, 10)*10), Time) AS mask SELECT Path, arrayFilter(m->m!=0, mask) AS times, arrayFilter((v,m)->m!=0, avgResample(1674288230, 1674288349, 10)(Value, Time), mask) AS values FROM graphite_reversed PREWHERE Date >= '2023-01-21' AND Date <= '2023-01-21' WHERE (Path in metrics_list) AND (Time >= 1674288230 AND Time <= 1674288349) GROUP BY Path FORMAT RowBinary","read_rows":"1228804","read_bytes":"164970948","written_rows":"0","written_bytes":"0","total_rows_to_read":"1228800","query_id":"1f72e822bed05bebd97a9bdcc4654f1a::1b87069be1c53ee2","time":0.261669254,"request_headers":{"X-Forwarded-User":"test"}}`,
+				`{"level":"INFO","timestamp":"2023-01-21T13:05:43.772+0500","logger":"render","message":"data_parse","request_id":"1f72e822bed05bebd97a9bdcc4654f1a","read_bytes":148,"read_points":4,"runtime":"39.481364ms","runtime_ns":0.039481364,"request_headers":{"X-Forwarded-User":"test"}}`,
+				`{"level":"DEBUG","timestamp":"2023-01-21T13:05:43.773+0500","logger":"render","message":"reply","request_id":"1f72e822bed05bebd97a9bdcc4654f1a","runtime":"63.018µs","runtime_ns":0.000063018,"request_headers":{"X-Forwarded-User":"test"}}`,
+				`{"level":"INFO","timestamp":"2023-01-21T13:05:43.773+0500","logger":"http","message":"access","request_id":"1f72e822bed05bebd97a9bdcc4654f1a","time":0.482252576,"wait_slot":0,"wait_fail":false,"method":"GET","url":"/render/?format=carbonapi_v3_pb","peer":"127.0.0.1:40354","client":"","status":200,"find_cached":false,"request_headers":{"X-Forwarded-User":"test"}}`,
 			},
-			queries: map[string]*Stat{
+			wantQueries: map[string]*Stat{
 				"1f72e822bed05bebd97a9bdcc4654f1a": {
+					Username:    "test",
 					RequestType: "render", Id: "1f72e822bed05bebd97a9bdcc4654f1a",
 					TimeStamp:     1674288343773000000,
 					Metrics:       1,
@@ -71,7 +72,7 @@ func Test_LogEntryProcess(t *testing.T) {
 				`{"level":"DEBUG","timestamp":"2023-01-21T13:05:50.374+0500","logger":"render","message":"reply","request_id":"3dba74b5575b2bc262bab3029c1b34fd","runtime":"2.32899ms","runtime_ns":0.00232899}`,
 				`{"level":"INFO","timestamp":"2023-01-21T13:05:50.374+0500","logger":"http","message":"access","request_id":"3dba74b5575b2bc262bab3029c1b34fd","time":0.323721465,"wait_slot":0,"wait_fail":false,"method":"GET","url":"/render/?format=carbonapi_v3_pb","peer":"127.0.0.1:44570","client":"","status":200,"find_cached":true}`,
 			},
-			queries: map[string]*Stat{
+			wantQueries: map[string]*Stat{
 				"3dba74b5575b2bc262bab3029c1b34fd": {
 					Id:        "3dba74b5575b2bc262bab3029c1b34fd",
 					TimeStamp: 1674288350374000000,
@@ -109,7 +110,7 @@ func Test_LogEntryProcess(t *testing.T) {
 				`{"level":"DEBUG","timestamp":"2023-01-21T14:39:10.263+0500","logger":"render","message":"reply","request_id":"3aa5cd1be020f8924438ca9969718a6c","runtime":"53.584µs","runtime_ns":0.000053584}`,
 				`{"level":"INFO","timestamp":"2023-01-21T14:39:10.263+0500","logger":"http","message":"access","request_id":"3aa5cd1be020f8924438ca9969718a6c","time":0.334478006,"wait_slot":0,"wait_fail":false,"method":"GET","url":"/render/?format=carbonapi_v3_pb","peer":"127.0.0.1:39260","client":"","status":200,"find_cached":true}`,
 			},
-			queries: map[string]*Stat{
+			wantQueries: map[string]*Stat{
 				"3aa5cd1be020f8924438ca9969718a6c": {
 					RequestType: "render", Id: "3aa5cd1be020f8924438ca9969718a6c",
 					TimeStamp: 1674293950263000000,
@@ -153,7 +154,7 @@ func Test_LogEntryProcess(t *testing.T) {
 				`{"level":"INFO","timestamp":"2023-01-21T13:06:20.528+0500","logger":"metrics-find","message":"finder","request_id":"fd3e9fd09a92bc3b7fb0d597f901e953","set_cache":"1970-02-12;query=test.c*;ts=1674288000","metrics":6,"find_cached":false,"ttl":600,"query":["test.c*"]}`,
 				`{"level":"INFO","timestamp":"2023-01-21T13:06:20.528+0500","logger":"http","message":"access","request_id":"fd3e9fd09a92bc3b7fb0d597f901e953","time":0.174497662,"wait_slot":0,"wait_fail":false,"method":"GET","url":"/metrics/find/?format=carbonapi_v3_pb&query=test.c%2A","peer":"127.0.0.1:39814","client":"","status":200,"find_cached":false}`,
 			},
-			queries: map[string]*Stat{
+			wantQueries: map[string]*Stat{
 				"fd3e9fd09a92bc3b7fb0d597f901e953": {
 					RequestType: "metrics_find", Id: "fd3e9fd09a92bc3b7fb0d597f901e953",
 					TimeStamp:     1674288380528000000,
@@ -180,7 +181,7 @@ func Test_LogEntryProcess(t *testing.T) {
 				`{"level":"INFO","timestamp":"2023-01-21T13:06:25.761+0500","logger":"metrics-find","message":"finder","request_id":"c9ec01a8b31079bfdfbc530a845f279c","get_cache":"1970-02-12;query=test.c*;ts=1674288000","metrics":6,"find_cached":true,"ttl":600,"query":["test.c*"]}`,
 				`{"level":"INFO","timestamp":"2023-01-21T13:06:25.761+0500","logger":"http","message":"access","request_id":"c9ec01a8b31079bfdfbc530a845f279c","time":0.00016375,"wait_slot":0,"wait_fail":false,"method":"GET","url":"/metrics/find/?format=carbonapi_v3_pb&query=test.c%2A","peer":"127.0.0.1:39818","client":"","status":200,"find_cached":true}`,
 			},
-			queries: map[string]*Stat{
+			wantQueries: map[string]*Stat{
 				"c9ec01a8b31079bfdfbc530a845f279c": {
 					RequestType: "metrics_find", Id: "c9ec01a8b31079bfdfbc530a845f279c",
 					Queries:       []Query{{Query: "test.c*"}},
@@ -198,7 +199,7 @@ func Test_LogEntryProcess(t *testing.T) {
 				`{"level":"INFO","timestamp":"2023-01-21T13:07:04.355+0500","logger":"autocomplete","message":"tag_names","request_id":"d4b7d5686f514502c362bafa608ca91b","set_cache":"tags;2023-01-21;2023-01-21;limit=10000;tagPrefix=c;tag=;app=chproxy;ts=1674288000","metrics":5,"find_cached":false,"ttl":600,"query":["tagPrefix=c","expr='app=chproxy'","limit=10000"]}`,
 				`{"level":"INFO","timestamp":"2023-01-21T13:07:04.355+0500","logger":"http","message":"access","request_id":"d4b7d5686f514502c362bafa608ca91b","time":0.176225304,"wait_slot":0,"wait_fail":false,"method":"GET","url":"/tags/autoComplete/tags?format=json&tagPrefix=c&expr=app%3Dchproxy","peer":"127.0.0.1:52368","client":"","status":200,"find_cached":false}`,
 			},
-			queries: map[string]*Stat{
+			wantQueries: map[string]*Stat{
 				"d4b7d5686f514502c362bafa608ca91b": {
 					RequestType: "tag_names", Id: "d4b7d5686f514502c362bafa608ca91b",
 					TimeStamp:     1674288424355000000,
@@ -224,7 +225,7 @@ func Test_LogEntryProcess(t *testing.T) {
 				`{"level":"INFO","timestamp":"2023-01-21T13:07:11.664+0500","logger":"autocomplete","message":"finder","request_id":"b01d7c166c417300bb0b93863f27d47a","get_cache":"tags;2023-01-21;2023-01-21;limit=10000;tagPrefix=c;tag=;app=chproxy;ts=1674288000","metrics":5,"find_cached":true,"ttl":600,"query":["tagPrefix=c","expr='app=chproxy'","limit=10000"]}`,
 				`{"level":"INFO","timestamp":"2023-01-21T13:07:11.665+0500","logger":"http","message":"access","request_id":"b01d7c166c417300bb0b93863f27d47a","time":0.000198872,"wait_slot":0,"wait_fail":false,"method":"GET","url":"/tags/autoComplete/tags?format=json&tagPrefix=c&expr=app%3Dchproxy","peer":"127.0.0.1:45856","client":"","status":200,"find_cached":true}`,
 			},
-			queries: map[string]*Stat{
+			wantQueries: map[string]*Stat{
 				"b01d7c166c417300bb0b93863f27d47a": {
 					RequestType: "tag_names", Id: "b01d7c166c417300bb0b93863f27d47a",
 					TimeStamp:     1674288431665000000,
@@ -242,7 +243,7 @@ func Test_LogEntryProcess(t *testing.T) {
 				`{"level":"INFO","timestamp":"2023-01-21T17:59:29.233+0500","logger":"autocomplete","message":"finder","request_id":"d7f506acefdc194c10a30cebabdfae06","set_cache":"values;2023-01-21;2023-01-21;limit=10000;valuePrefix=;tag=__name__;app=chproxy;ts=1674305400","metrics":71,"find_cached":false,"ttl":600,"query":["tag=__name__","expr='app=chproxy'","limit=10000"]}`,
 				`{"level":"INFO","timestamp":"2023-01-21T17:59:29.233+0500","logger":"http","message":"access","request_id":"d7f506acefdc194c10a30cebabdfae06","time":0.147378304,"wait_slot":0,"wait_fail":false,"method":"GET","url":"/tags/autoComplete/values?format=json&tag=c&expr=app%3Dchproxy","peer":"127.0.0.1:38800","client":"","status":200,"find_cached":false}`,
 			},
-			queries: map[string]*Stat{
+			wantQueries: map[string]*Stat{
 				"d7f506acefdc194c10a30cebabdfae06": {
 					RequestType: "tag_values", Id: "d7f506acefdc194c10a30cebabdfae06",
 					TimeStamp:     1674305969233000000,
@@ -268,7 +269,7 @@ func Test_LogEntryProcess(t *testing.T) {
 				`{"level":"INFO","timestamp":"2023-01-21T13:10:49.693+0500","logger":"autocomplete","message":"finder","request_id":"755043946ebafc11639efa26a8fdc51d","get_cache":"values;2023-01-21;2023-01-21;limit=10000;valuePrefix=;tag=__name__;app=chproxy;ts=1674288600","metrics":71,"find_cached":true,"ttl":600,"query":["tag=__name__","expr='app=chproxy'","limit=10000"]}`,
 				`{"level":"INFO","timestamp":"2023-01-21T13:10:49.693+0500","logger":"http","message":"access","request_id":"755043946ebafc11639efa26a8fdc51d","time":0.00038786,"wait_slot":0,"wait_fail":false,"method":"GET","url":"/tags/autoComplete/values?format=json&tag=c&expr=app+%3D+chproxy","peer":"127.0.0.1:38152","client":"","status":200,"find_cached":true}`,
 			},
-			queries: map[string]*Stat{
+			wantQueries: map[string]*Stat{
 				"755043946ebafc11639efa26a8fdc51d": {
 					RequestType: "tag_values", Id: "755043946ebafc11639efa26a8fdc51d",
 					TimeStamp:     1674288649693000000,
@@ -285,9 +286,10 @@ func Test_LogEntryProcess(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			queries := make(map[string]*Stat)
+			var logEntry map[string]interface{}
 
 			for _, entry := range tt.entries {
-				var logEntry map[string]interface{}
+				ResetLogEntry(logEntry)
 				err := json.Unmarshal([]byte(entry), &logEntry)
 				if err != nil {
 					t.Fatalf("%v: %s", err, entry)
@@ -295,8 +297,8 @@ func Test_LogEntryProcess(t *testing.T) {
 				LogEntryProcess(logEntry, queries)
 			}
 
-			if !reflect.DeepEqual(tt.queries, queries) {
-				t.Fatalf("LogEntryProcess() = %s", cmp.Diff(tt.queries, queries))
+			if !reflect.DeepEqual(tt.wantQueries, queries) {
+				t.Fatalf("LogEntryProcess() = %s", cmp.Diff(tt.wantQueries, queries))
 			}
 		})
 	}
