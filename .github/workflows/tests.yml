@@ -37,4 +37,4 @@ jobs:
         run: make test
 
       - name: Run lint
-        uses: golangci/golangci-lint-action@v3
+        uses: golangci/golangci-lint-action@v4
